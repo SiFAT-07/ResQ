@@ -1,36 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:math' as math;
+import 'package:provider/provider.dart';
+import 'HomePage.dart';
+import 'signup.dart';
+import 'providers/auth_provider.dart';
+import 'widgets/connection_error_widget.dart';
+import 'utils/provider_wrapper.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// Create a wrapper for LoginPage with the required provider
+class LoginPageWrapper extends StatelessWidget {
+  const LoginPageWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'ResQ Emergency Services',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        fontFamily: 'Montserrat',
-      ),
-      home: const LoginPage(),
-    );
+    // Use our utility wrapper to ensure the provider is available
+    return ProviderWrapper(child: const LoginPage());
   }
 }
 
@@ -45,14 +29,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   bool showPassword = false;
   bool rememberMe = false;
-  final Map<String, dynamic> formData = {};
 
   // Admin mode tracking
   bool _isAdminMode = false;
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   int _adminTapCount = 0;
-  final String _adminEmail = "admin@resq.com";
+  final String _adminUsername = "admin";
   final String _adminPassword = "admin123";
 
   // Animation controllers
@@ -61,6 +44,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
+
+  // Loading state
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -104,7 +91,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void dispose() {
     _mainController.dispose();
     _pulseController.dispose();
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -229,7 +216,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   // Check if admin credentials are entered
   void _checkAdminAccess() {
-    if (_emailController.text == _adminEmail &&
+    if (_usernameController.text == _adminUsername &&
         _passwordController.text == _adminPassword) {
       setState(() {
         _isAdminMode = true;
@@ -254,6 +241,153 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         _adminTapCount = 0; // Reset count
       }
     });
+  }
+
+  // Handle login submission
+  Future<void> _handleLogin() async {
+    if (_formKey.currentState?.validate() ?? false) {
+      _formKey.currentState?.save();
+
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      // Check for admin login
+      if (_usernameController.text == _adminUsername &&
+          _passwordController.text == _adminPassword) {
+        setState(() {
+          _isAdminMode = true;
+          _isLoading = false;
+        });
+        _runAsAdmin();
+        return;
+      }
+
+      try {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+        // Using the login method from AuthProvider
+        final success = await authProvider.login(
+          _usernameController.text,
+          _passwordController.text,
+        );
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text("Login successful - Welcome to ResQ"),
+                ],
+              ),
+              backgroundColor: const Color(0xFFE53935),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+
+          // Navigate to HomePage after successful login
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+          );
+        } else if (authProvider.status == AuthStatus.connectionError) {
+          // Show connection error dialog
+          _showConnectionErrorDialog(
+            context,
+            authProvider.errorMessage ?? "Connection error",
+          );
+        } else {
+          setState(() {
+            _errorMessage = authProvider.errorMessage;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _errorMessage = e.toString();
+        });
+      } finally {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showAuthenticationErrorDialog(
+    BuildContext context,
+    String errorMessage,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red[700]),
+                const SizedBox(width: 10),
+                const Text('Authentication Failed'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(errorMessage),
+                const SizedBox(height: 16),
+                const Text(
+                  'Possible solutions:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text('• Check that your username is correct'),
+                const Text('• Make sure your password is correct'),
+                const Text(
+                  '• If you\'ve forgotten your password, use the forgot password option',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showConnectionErrorDialog(BuildContext context, String errorMessage) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            contentPadding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ConnectionErrorWidget(
+                errorMessage: errorMessage,
+                onRetry: () {
+                  Navigator.pop(context);
+                  final authProvider = Provider.of<AuthProvider>(
+                    context,
+                    listen: false,
+                  );
+                  authProvider.retryConnection();
+                },
+              ),
+            ),
+          ),
+    );
   }
 
   @override
@@ -370,7 +504,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                "Login to your account",
+                                "Login with your username",
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey[600],
@@ -379,12 +513,43 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 40),
 
-                              // Email field
+                              // Error message
+                              if (_errorMessage != null)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 20),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.red.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        color: Colors.red.shade700,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorMessage!,
+                                          style: TextStyle(
+                                            color: Colors.red.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                              // Username field
                               buildTextField(
-                                "Email or ID",
-                                Icons.person_outline_rounded,
+                                "Username",
+                                Icons.person_outline,
                                 primaryRed,
-                                controller: _emailController,
+                                controller: _usernameController,
                               ),
                               const SizedBox(height: 16),
 
@@ -464,139 +629,66 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               const SizedBox(height: 40),
 
                               // Login button with animation and loading state
-                              StatefulBuilder(
-                                builder: (context, setInnerState) {
-                                  bool isLoading = false;
-
-                                  return Container(
-                                    width: double.infinity,
-                                    height: 56,
-                                    decoration: BoxDecoration(
+                              Container(
+                                width: double.infinity,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  gradient: LinearGradient(
+                                    colors: [redGradientDark, redGradientLight],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: primaryRed.withOpacity(0.4),
+                                      blurRadius: 12,
+                                      spreadRadius: 0,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    disabledBackgroundColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          redGradientDark,
-                                          redGradientLight,
-                                        ],
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: primaryRed.withOpacity(0.4),
-                                          blurRadius: 12,
-                                          spreadRadius: 0,
-                                          offset: const Offset(0, 6),
-                                        ),
-                                      ],
                                     ),
-                                    child: ElevatedButton(
-                                      onPressed:
-                                          isLoading
-                                              ? null
-                                              : () async {
-                                                if (_formKey.currentState
-                                                        ?.validate() ??
-                                                    false) {
-                                                  setInnerState(
-                                                    () => isLoading = true,
-                                                  );
-                                                  _formKey.currentState?.save();
-
-                                                  // Simulate network delay
-                                                  await Future.delayed(
-                                                    const Duration(seconds: 1),
-                                                  );
-
-                                                  // Check for admin access
-                                                  _checkAdminAccess();
-
-                                                  // Regular login flow
-                                                  if (!_isAdminMode) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: const Row(
-                                                          children: [
-                                                            Icon(
-                                                              Icons
-                                                                  .check_circle,
-                                                              color:
-                                                                  Colors.white,
-                                                            ),
-                                                            SizedBox(width: 10),
-                                                            Text(
-                                                              "Login successful - Welcome to ResQ",
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        backgroundColor:
-                                                            primaryRed,
-                                                        behavior:
-                                                            SnackBarBehavior
-                                                                .floating,
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                10,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-
-                                                  setInnerState(
-                                                    () => isLoading = false,
-                                                  );
-                                                }
-                                              },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        disabledBackgroundColor:
-                                            Colors.transparent,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                      ),
-                                      child:
-                                          isLoading
-                                              ? const SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      color: Colors.white,
-                                                      strokeWidth: 2.5,
-                                                    ),
-                                              )
-                                              : const Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    "SIGN IN",
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      letterSpacing: 1.2,
-                                                    ),
-                                                  ),
-                                                  SizedBox(width: 8),
-                                                  Icon(
-                                                    Icons.arrow_forward_rounded,
-                                                    size: 20,
-                                                  ),
-                                                ],
+                                  ),
+                                  child:
+                                      _isLoading
+                                          ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.5,
+                                            ),
+                                          )
+                                          : const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                "SIGN IN",
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 1.2,
+                                                ),
                                               ),
-                                    ),
-                                  );
-                                },
+                                              SizedBox(width: 8),
+                                              Icon(
+                                                Icons.arrow_forward_rounded,
+                                                size: 20,
+                                              ),
+                                            ],
+                                          ),
+                                ),
                               ),
 
                               const SizedBox(height: 40),
@@ -664,7 +756,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     style: TextStyle(color: Colors.grey[700]),
                                   ),
                                   TextButton(
-                                    onPressed: () {},
+                                    onPressed: () {
+                                      // Navigate to signup page with proper provider wrapper
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder:
+                                              (context) =>
+                                                  const RoleBasedSignUpPageWrapper(),
+                                        ),
+                                      );
+                                    },
                                     style: TextButton.styleFrom(
                                       foregroundColor: primaryRed,
                                       padding: const EdgeInsets.symmetric(
@@ -771,22 +873,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             fontWeight: FontWeight.w600,
           ),
         ),
-        keyboardType: TextInputType.emailAddress,
+        keyboardType: TextInputType.text, // Always text for username
         validator: (value) {
-          if (value == null || value.isEmpty) return "Please enter $label";
-          if (label.contains("Email") &&
-              !RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
-            return "Please enter a valid email";
+          if (value == null || value.isEmpty) {
+            return "Please enter $label";
           }
           return null;
-        },
-        onSaved: (value) => formData[label] = value,
-        onChanged: (value) {
-          // You can add real-time validation here if needed
-          if (label.contains("Email")) {
-            final bool isValid = RegExp(r'\S+@\S+\.\S+').hasMatch(value);
-            // Optional: provide real-time feedback
-          }
         },
       ),
     );
@@ -886,13 +978,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         validator:
             (value) =>
                 value == null || value.isEmpty ? "Please enter $label" : null,
-        onSaved: (value) => formData[label] = value,
-        onChanged: (value) {
-          // Password strength logic could be added here
-          if (value.length < 6) {
-            // Optional: weak password indication
-          }
-        },
       ),
     );
   }

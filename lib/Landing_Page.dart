@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import 'dart:async';
+import 'signup.dart';
+import 'login.dart';
 
 void main() {
   runApp(const ResqEmergencyApp());
 }
 
 class ResqEmergencyApp extends StatelessWidget {
-  const ResqEmergencyApp({Key? key}) : super(key: key);
+  const ResqEmergencyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +28,7 @@ class ResqEmergencyApp extends StatelessWidget {
 }
 
 class LandingPage extends StatefulWidget {
-  const LandingPage({Key? key}) : super(key: key);
+  const LandingPage({super.key});
 
   @override
   State<LandingPage> createState() => _LandingPageState();
@@ -211,8 +213,9 @@ class _LandingPageState extends State<LandingPage>
                         }),
                     onTapCancel: () => setState(() => _isPressed = false),
                     onTap: () {
-                      // Navigation logic would go here
+                      // Show options dialog instead of direct navigation
                       HapticFeedback.mediumImpact(); // Add haptic feedback
+                      _showAuthOptions(context);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
@@ -252,7 +255,8 @@ class _LandingPageState extends State<LandingPage>
                                 0,
                               ),
                               child: Icon(
-                                Icons.health_and_safety,
+                                Icons
+                                    .login_rounded, // Changed icon to login_rounded
                                 color: _isHovered ? Colors.red : Colors.white,
                                 size: 22,
                               ),
@@ -266,7 +270,7 @@ class _LandingPageState extends State<LandingPage>
                                 color: _isHovered ? Colors.red : Colors.white,
                                 letterSpacing: 0.5,
                               ),
-                              child: const Text('Access Services'),
+                              child: const Text('Get Started'), // Updated text
                             ),
                             const SizedBox(width: 8),
                             AnimatedContainer(
@@ -326,13 +330,157 @@ class _LandingPageState extends State<LandingPage>
       ),
     );
   }
+
+  // Update the navigation in _buildAuthOptionButton method
+  Widget _buildAuthOptionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // In the _showAuthOptions method, update the navigation to signup page
+  void _showAuthOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 50,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Join ResQ Emergency Services',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose how you want to continue',
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+
+                // Sign Up Button
+                _buildAuthOptionButton(
+                  context: context,
+                  icon: Icons.person_add,
+                  title: 'Create a New Account',
+                  subtitle: 'Sign up to access emergency services',
+                  color: Colors.red,
+                  onTap: () {
+                    Navigator.pop(context); // Close the bottom sheet
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => const RoleBasedSignUpPageWrapper(),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Login Button
+                _buildAuthOptionButton(
+                  context: context,
+                  icon: Icons.login_rounded,
+                  title: 'Login to Your Account',
+                  subtitle: 'Access your existing ResQ account',
+                  color: Colors.blue.shade700,
+                  onTap: () {
+                    Navigator.pop(context); // Close the bottom sheet
+                    // Use LoginPageWrapper instead of LoginPage directly
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPageWrapper(),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+    );
+  }
 }
 
 // Enhanced logo with smoother animation
 class EnhancedLogo extends StatelessWidget {
   final AnimationController controller;
 
-  const EnhancedLogo({Key? key, required this.controller}) : super(key: key);
+  const EnhancedLogo({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -394,6 +542,8 @@ class EnhancedLogo extends StatelessWidget {
 
 // Enhanced background elements with better aesthetics
 class EnhancedBackgroundObstacles extends StatefulWidget {
+  const EnhancedBackgroundObstacles({super.key});
+
   @override
   _EnhancedBackgroundObstaclesState createState() =>
       _EnhancedBackgroundObstaclesState();
@@ -592,8 +742,7 @@ class _EnhancedBackgroundObstaclesState
 class EnhancedBackgroundElements extends StatelessWidget {
   final AnimationController controller;
 
-  const EnhancedBackgroundElements({Key? key, required this.controller})
-    : super(key: key);
+  const EnhancedBackgroundElements({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -702,11 +851,11 @@ class EnhancedEmergencySymbol extends StatelessWidget {
   final AnimationController controller;
 
   const EnhancedEmergencySymbol({
-    Key? key,
+    super.key,
     required this.size,
     required this.type,
     required this.controller,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,45 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'ResQ App',
-      theme: ThemeData(
-        primaryColor: const Color(0xFFE53935),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          primary: const Color(0xFFE53935),
-          secondary: const Color(0xFFFF5252),
-          background: Colors.white,
-          surface: Colors.white,
-        ),
-        fontFamily: 'Inter',
-        useMaterial3: true,
-      ),
-      home: const RoleBasedSignUpPage(),
-    );
-  }
-}
+import 'package:provider/provider.dart';
+import 'HomePage.dart';
+import 'login.dart';
+import 'providers/auth_provider.dart';
+import 'widgets/connection_error_widget.dart';
+import 'utils/provider_wrapper.dart';
 
 class RoleBasedSignUpPage extends StatefulWidget {
   const RoleBasedSignUpPage({super.key});
 
   @override
   State<RoleBasedSignUpPage> createState() => _RoleBasedSignUpPageState();
+}
+
+// Create a widget that wraps the signup page with the required provider
+class RoleBasedSignUpPageWrapper extends StatelessWidget {
+  const RoleBasedSignUpPageWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Use our utility wrapper to ensure the provider is available
+    return ProviderWrapper(child: const RoleBasedSignUpPage());
+  }
 }
 
 class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
@@ -50,12 +33,43 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
   final Map<String, dynamic> formData = {};
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  // Text controllers
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _idController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _stationNameController = TextEditingController();
+  final TextEditingController _teamNameController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
   final List<Map<String, dynamic>> roles = [
-    {'label': 'Civilian', 'icon': Icons.person_outline_rounded},
-    {'label': 'Fire Officer', 'icon': Icons.local_fire_department_outlined},
-    {'label': 'Police Officer', 'icon': Icons.local_police_outlined},
-    {'label': 'Volunteer Head', 'icon': Icons.volunteer_activism_outlined},
+    {
+      'label': 'Civilian',
+      'icon': Icons.person_outline_rounded,
+      'apiRole': 'CITIZEN',
+    },
+    {
+      'label': 'Fire Officer',
+      'icon': Icons.local_fire_department_outlined,
+      'apiRole': 'FIRE_STATION',
+    },
+    {
+      'label': 'Police Officer',
+      'icon': Icons.local_police_outlined,
+      'apiRole': 'POLICE',
+    },
+    {
+      'label': 'Volunteer Head',
+      'icon': Icons.volunteer_activism_outlined,
+      'apiRole': 'RED_CRESCENT',
+    },
   ];
 
   @override
@@ -81,7 +95,141 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
   @override
   void dispose() {
     _controller.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _idController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _usernameController.dispose();
+    _stationNameController.dispose();
+    _teamNameController.dispose();
+    _addressController.dispose();
     super.dispose();
+  }
+
+  // Get API role from selected role
+  String _getApiRole() {
+    if (selectedRole == null) return 'CITIZEN';
+
+    final roleMap = roles.firstWhere(
+      (role) => role['label'] == selectedRole,
+      orElse: () => {'apiRole': 'CITIZEN'},
+    );
+
+    return roleMap['apiRole'];
+  }
+
+  // Handle registration submission
+  Future<void> _handleSignUp() async {
+    if (_formKey.currentState?.validate() ?? false) {
+      _formKey.currentState?.save();
+
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      try {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+        // Split full name into first and last name
+        final nameParts = _nameController.text.split(' ');
+        final firstName = nameParts.first;
+        final lastName =
+            nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+        // Use mock location data for now - in a real app you'd get actual coordinates
+        const double latitude = 23.810331;
+        const double longitude = 90.412521;
+        final String address =
+            _addressController.text.isNotEmpty
+                ? _addressController.text
+                : "Default Address";
+
+        final success = await authProvider.register(
+          username: _usernameController.text,
+          email: _emailController.text,
+          password: _passwordController.text,
+          firstName: firstName,
+          lastName: lastName,
+          phoneNumber: _phoneController.text,
+          role: _getApiRole(),
+          latitude: latitude,
+          longitude: longitude,
+          address: address,
+        );
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Sign up Successful! Please login to continue.',
+                style: TextStyle(color: Colors.white),
+              ),
+              backgroundColor: const Color(0xFFE53935),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+
+          // Navigate to LoginPage after successful sign up
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPageWrapper()),
+          );
+        } else if (authProvider.status == AuthStatus.connectionError) {
+          // Show connection error dialog
+          _showConnectionErrorDialog(
+            context,
+            authProvider.errorMessage ?? "Connection error",
+          );
+        } else {
+          setState(() {
+            _errorMessage = authProvider.errorMessage;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _errorMessage = e.toString();
+        });
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _showConnectionErrorDialog(BuildContext context, String errorMessage) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            contentPadding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ConnectionErrorWidget(
+                errorMessage: errorMessage,
+                onRetry: () {
+                  Navigator.pop(context);
+                  final authProvider = Provider.of<AuthProvider>(
+                    context,
+                    listen: false,
+                  );
+                  authProvider.retryConnection();
+                },
+              ),
+            ),
+          ),
+    );
   }
 
   void showRoleSelector() {
@@ -101,15 +249,15 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "Select Your Role",
+                    'Select Your Role',
                     style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: Color(0xFF212121),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Color(0xFF757575)),
+                    icon: const Icon(Icons.close, color: Color(0xFF9E9E9E)),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -119,45 +267,40 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
               const SizedBox(height: 8),
               Expanded(
                 child: ListView(
-                  shrinkWrap: true,
                   children:
-                      roles
-                          .map(
-                            (role) => ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 8,
-                                horizontal: 16,
-                              ),
-                              leading: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFEBEE),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  role['icon'],
-                                  color: const Color(0xFFE53935),
-                                  size: 24,
-                                ),
-                              ),
-                              title: Text(
-                                role['label'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 16,
-                                  color: Color(0xFF212121),
-                                ),
-                              ),
-                              onTap: () {
-                                setState(() {
-                                  selectedRole = role['label'];
-                                  formData.clear();
-                                });
-                                Navigator.pop(context);
-                              },
+                      roles.map((role) {
+                        return ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F5F5),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          )
-                          .toList(),
+                            child: Icon(
+                              role['icon'],
+                              color: const Color(0xFFE53935),
+                            ),
+                          ),
+                          title: Text(
+                            role['label'],
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF212121),
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.arrow_forward_ios,
+                            color: Color(0xFF9E9E9E),
+                            size: 16,
+                          ),
+                          onTap: () {
+                            setState(() {
+                              selectedRole = role['label'];
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      }).toList(),
                 ),
               ),
             ],
@@ -183,6 +326,11 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
       return;
     }
     print('Signing up with $provider as $selectedRole');
+    // Navigate to HomePage after social sign up
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+    );
   }
 
   @override
@@ -221,53 +369,68 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
                 const SizedBox(height: 16),
                 const Center(
                   child: Text(
-                    'ResQ',
+                    "Join ResQ",
                     style: TextStyle(
-                      color: Color(0xFFE53935),
                       fontSize: 24,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF212121),
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 const Center(
                   child: Text(
-                    'Emergency Response System',
-                    style: TextStyle(
-                      color: Color(0xFF757575),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    "Create an account to access emergency services",
+                    style: TextStyle(fontSize: 14, color: Color(0xFF757575)),
                   ),
                 ),
                 const SizedBox(height: 6),
                 const Center(
                   child: Text(
-                    '© ResQ Digital 2025',
-                    style: TextStyle(
-                      color: Color(0xFF9E9E9E),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    "tailored to your role",
+                    style: TextStyle(fontSize: 14, color: Color(0xFF757575)),
                   ),
                 ),
                 const SizedBox(height: 40),
 
-                buildRolePicker(),
-                const SizedBox(height: 24),
-
-                if (selectedRole != null)
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOut,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: buildFormFields(selectedRole!),
+                if (_errorMessage != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
+                buildRolePicker(),
                 const SizedBox(height: 24),
-                buildSubmitButton(),
+
+                if (selectedRole != null) buildFormFields(selectedRole!),
+
+                const SizedBox(height: 24),
+
+                _isLoading
+                    ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFE53935),
+                      ),
+                    )
+                    : buildSubmitButton(),
+
                 const SizedBox(height: 32),
 
                 buildSocialButtons(),
@@ -279,24 +442,25 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text(
-                        'Already have an account? ',
-                        style: TextStyle(
-                          color: Color(0xFF757575),
-                          fontSize: 14,
-                        ),
+                        "Already have an account?",
+                        style: TextStyle(color: Color(0xFF757575)),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          // Navigate to login page
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const LoginPageWrapper(),
+                            ),
+                          );
                         },
-                        child: const Text(
-                          'Sign In',
-                          style: TextStyle(
-                            color: Color(0xFFE53935),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFE53935),
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.only(left: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
+                        child: const Text("Sign In"),
                       ),
                     ],
                   ),
@@ -321,7 +485,6 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
                 "OR SIGN UP WITH",
                 style: TextStyle(
                   color: Color(0xFF9E9E9E),
-                  fontWeight: FontWeight.w500,
                   fontSize: 12,
                   letterSpacing: 1,
                 ),
@@ -390,57 +553,46 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color:
-                    selectedRole != null
-                        ? const Color(0xFFE53935)
-                        : const Color(0xFFE0E0E0),
-                width: 1,
-              ),
+              border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFEBEE),
-                        borderRadius: BorderRadius.circular(10),
+                    if (selectedRole != null)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          roles.firstWhere(
+                            (role) => role['label'] == selectedRole,
+                            orElse:
+                                () => {'icon': Icons.person_outline_rounded},
+                          )['icon'],
+                          color: const Color(0xFFE53935),
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(
-                        selectedRole != null
-                            ? roles.firstWhere(
-                              (role) => role['label'] == selectedRole,
-                            )['icon']
-                            : Icons.person_outline_rounded,
-                        color:
-                            selectedRole != null
-                                ? const Color(0xFFE53935)
-                                : const Color(0xFF9E9E9E),
-                        size: 20,
-                      ),
-                    ),
                     const SizedBox(width: 12),
                     Text(
-                      selectedRole ?? 'Select your role',
+                      selectedRole ?? "Select your role",
                       style: TextStyle(
-                        fontSize: 16,
                         color:
                             selectedRole != null
                                 ? const Color(0xFF212121)
                                 : const Color(0xFF9E9E9E),
+                        fontSize: 16,
                       ),
                     ),
                   ],
                 ),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  color:
-                      selectedRole != null
-                          ? const Color(0xFFE53935)
-                          : const Color(0xFF9E9E9E),
+                  color: const Color(0xFF9E9E9E),
                 ),
               ],
             ),
@@ -452,26 +604,7 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
 
   Widget buildSubmitButton() {
     return ElevatedButton(
-      onPressed: () {
-        if (_formKey.currentState?.validate() ?? false) {
-          _formKey.currentState?.save();
-          print(formData);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Sign up Successful!',
-                style: TextStyle(color: Colors.white),
-              ),
-              backgroundColor: const Color(0xFFE53935),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(16),
-            ),
-          );
-        }
-      },
+      onPressed: _handleSignUp,
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFFE53935),
         foregroundColor: Colors.white,
@@ -495,55 +628,473 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
     switch (role) {
       case 'Civilian':
         return [
-          buildTextField('Full Name', Icons.person_outline_rounded),
-          buildTextField('Email Address', Icons.email_outlined),
-          buildTextField('Phone Number', Icons.phone_outlined),
-          buildTextField('National ID', Icons.badge_outlined),
-          buildPasswordField('Password'),
-          buildPasswordField('Confirm Password'),
+          buildTextField(
+            'Full Name',
+            Icons.person_outline_rounded,
+            controller: _nameController,
+            hint: 'Enter your full name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your full name';
+              }
+              if (!value.contains(' ')) {
+                return 'Please enter both first and last name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Username',
+            Icons.account_circle_outlined,
+            controller: _usernameController,
+            hint: 'Choose a unique username',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              if (value.contains(' ')) {
+                return 'Username cannot contain spaces';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Email Address',
+            Icons.email_outlined,
+            controller: _emailController,
+            hint: 'example@email.com',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter an email address';
+              }
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Phone Number',
+            Icons.phone_outlined,
+            controller: _phoneController,
+            hint: '+880 1X XXXX XXXX',
+            keyboardType: TextInputType.phone,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your phone number';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Home Address',
+            Icons.home_outlined,
+            controller: _addressController,
+            hint: 'Enter your full address',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your address';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'National ID',
+            Icons.badge_outlined,
+            controller: _idController,
+            hint: 'Enter your National ID number',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your National ID';
+              }
+              return null;
+            },
+          ),
+          buildPasswordField(
+            'Password',
+            controller: _passwordController,
+            hint: 'Create a strong password',
+          ),
+          buildPasswordField(
+            'Confirm Password',
+            controller: _confirmPasswordController,
+            hint: 'Re-enter your password',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please confirm your password';
+              }
+              if (value != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+              return null;
+            },
+          ),
         ];
       case 'Fire Officer':
         return [
-          buildTextField('Officer Name', Icons.person_outline_rounded),
+          buildTextField(
+            'Officer Name',
+            Icons.person_outline_rounded,
+            controller: _nameController,
+            hint: 'Enter your full name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your full name';
+              }
+              if (!value.contains(' ')) {
+                return 'Please enter both first and last name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Username',
+            Icons.account_circle_outlined,
+            controller: _usernameController,
+            hint: 'Choose a unique username',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              if (value.contains(' ')) {
+                return 'Username cannot contain spaces';
+              }
+              return null;
+            },
+          ),
           buildTextField(
             'Fire Station Name',
             Icons.local_fire_department_outlined,
+            controller: _stationNameController,
+            hint: 'Enter your fire station name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter fire station name';
+              }
+              return null;
+            },
           ),
-          buildTextField('Station Email', Icons.email_outlined),
-          buildUniqueIdField('Station ID', Icons.verified_outlined),
-          buildPasswordField('Password'),
-          buildPasswordField('Confirm Password'),
+          buildTextField(
+            'Station Email',
+            Icons.email_outlined,
+            controller: _emailController,
+            hint: 'station@firedept.gov.bd',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station email address';
+              }
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Phone Number',
+            Icons.phone_outlined,
+            controller: _phoneController,
+            hint: '+880 1X XXXX XXXX',
+            keyboardType: TextInputType.phone,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station phone number';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Station Address',
+            Icons.location_on_outlined,
+            controller: _addressController,
+            hint: 'Enter station address',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station address';
+              }
+              return null;
+            },
+          ),
+          buildUniqueIdField(
+            'Station ID',
+            Icons.verified_outlined,
+            controller: _idController,
+            hint: 'Enter official station ID',
+          ),
+          buildPasswordField(
+            'Password',
+            controller: _passwordController,
+            hint: 'Create a strong password',
+          ),
+          buildPasswordField(
+            'Confirm Password',
+            controller: _confirmPasswordController,
+            hint: 'Re-enter your password',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please confirm your password';
+              }
+              if (value != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+              return null;
+            },
+          ),
         ];
       case 'Police Officer':
         return [
-          buildTextField('Officer Name', Icons.person_outline_rounded),
-          buildTextField('Police Station Name', Icons.local_police_outlined),
-          buildTextField('Station Email', Icons.email_outlined),
-          buildUniqueIdField('Station ID', Icons.verified_outlined),
-          buildPasswordField('Password'),
-          buildPasswordField('Confirm Password'),
+          buildTextField(
+            'Officer Name',
+            Icons.person_outline_rounded,
+            controller: _nameController,
+            hint: 'Enter your full name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your full name';
+              }
+              if (!value.contains(' ')) {
+                return 'Please enter both first and last name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Username',
+            Icons.account_circle_outlined,
+            controller: _usernameController,
+            hint: 'Choose a unique username',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              if (value.contains(' ')) {
+                return 'Username cannot contain spaces';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Police Station Name',
+            Icons.local_police_outlined,
+            controller: _stationNameController,
+            hint: 'Enter your police station name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter police station name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Station Email',
+            Icons.email_outlined,
+            controller: _emailController,
+            hint: 'station@police.gov.bd',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station email address';
+              }
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Phone Number',
+            Icons.phone_outlined,
+            controller: _phoneController,
+            hint: '+880 1X XXXX XXXX',
+            keyboardType: TextInputType.phone,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station phone number';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Station Address',
+            Icons.location_on_outlined,
+            controller: _addressController,
+            hint: 'Enter station address',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter station address';
+              }
+              return null;
+            },
+          ),
+          buildUniqueIdField(
+            'Station ID',
+            Icons.verified_outlined,
+            controller: _idController,
+            hint: 'Enter official police station ID',
+          ),
+          buildPasswordField(
+            'Password',
+            controller: _passwordController,
+            hint: 'Create a strong password',
+          ),
+          buildPasswordField(
+            'Confirm Password',
+            controller: _confirmPasswordController,
+            hint: 'Re-enter your password',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please confirm your password';
+              }
+              if (value != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+              return null;
+            },
+          ),
         ];
       case 'Volunteer Head':
         return [
-          buildTextField('Head Name', Icons.person_outline_rounded),
-          buildTextField('Team Name', Icons.groups_outlined),
-          buildTextField('Team Email', Icons.email_outlined),
-          buildUniqueIdField('Team ID', Icons.verified_outlined),
-          buildPasswordField('Password'),
-          buildPasswordField('Confirm Password'),
+          buildTextField(
+            'Head Name',
+            Icons.person_outline_rounded,
+            controller: _nameController,
+            hint: 'Enter your full name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your full name';
+              }
+              if (!value.contains(' ')) {
+                return 'Please enter both first and last name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Username',
+            Icons.account_circle_outlined,
+            controller: _usernameController,
+            hint: 'Choose a unique username',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              if (value.contains(' ')) {
+                return 'Username cannot contain spaces';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Team Name',
+            Icons.groups_outlined,
+            controller: _teamNameController,
+            hint: 'Enter your volunteer team name',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter team name';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Team Email',
+            Icons.email_outlined,
+            controller: _emailController,
+            hint: 'team@volunteers.org',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter team email address';
+              }
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Phone Number',
+            Icons.phone_outlined,
+            controller: _phoneController,
+            hint: '+880 1X XXXX XXXX',
+            keyboardType: TextInputType.phone,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter team phone number';
+              }
+              return null;
+            },
+          ),
+          buildTextField(
+            'Team Address',
+            Icons.location_on_outlined,
+            controller: _addressController,
+            hint: 'Enter team headquarters address',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter team address';
+              }
+              return null;
+            },
+          ),
+          buildUniqueIdField(
+            'Team ID',
+            Icons.verified_outlined,
+            controller: _idController,
+            hint: 'Enter official volunteer team ID',
+          ),
+          buildPasswordField(
+            'Password',
+            controller: _passwordController,
+            hint: 'Create a strong password',
+          ),
+          buildPasswordField(
+            'Confirm Password',
+            controller: _confirmPasswordController,
+            hint: 'Re-enter your password',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please confirm your password';
+              }
+              if (value != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+              return null;
+            },
+          ),
         ];
       default:
         return [];
     }
   }
 
-  Widget buildTextField(String label, IconData icon) {
+  Widget buildTextField(
+    String label,
+    IconData icon, {
+    TextEditingController? controller,
+    String? Function(String?)? validator,
+    TextInputType keyboardType = TextInputType.text,
+    String? hint,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hint,
           labelStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
           prefixIcon: Icon(icon, color: const Color(0xFF9E9E9E), size: 20),
           filled: true,
           fillColor: const Color(0xFFFAFAFA),
@@ -569,6 +1120,7 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
           ),
         ),
         validator:
+            validator ??
             (value) =>
                 value == null || value.isEmpty ? 'Please enter $label' : null,
         onSaved: (value) => formData[label] = value,
@@ -576,14 +1128,22 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
     );
   }
 
-  Widget buildPasswordField(String label) {
+  Widget buildPasswordField(
+    String label, {
+    TextEditingController? controller,
+    String? Function(String?)? validator,
+    String? hint,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
+        controller: controller,
         obscureText: !showPassword,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hint,
           labelStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
           prefixIcon: const Icon(
             Icons.lock_outline_rounded,
             color: Color(0xFF9E9E9E),
@@ -623,20 +1183,31 @@ class _RoleBasedSignUpPageState extends State<RoleBasedSignUpPage>
           ),
         ),
         validator:
-            (value) =>
-                value == null || value.isEmpty ? 'Please enter $label' : null,
+            validator ??
+            (value) {
+              if (value == null || value.isEmpty) return 'Please enter $label';
+              return null; // Removed password length restriction
+            },
         onSaved: (value) => formData[label] = value,
       ),
     );
   }
 
-  Widget buildUniqueIdField(String label, IconData icon) {
+  Widget buildUniqueIdField(
+    String label,
+    IconData icon, {
+    TextEditingController? controller,
+    String? hint,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
+        controller: controller,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hint,
           labelStyle: const TextStyle(color: Color(0xFF757575), fontSize: 14),
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
           prefixIcon: Icon(icon, color: const Color(0xFF9E9E9E), size: 20),
           filled: true,
           fillColor: const Color(0xFFFAFAFA),

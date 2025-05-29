@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'providers/auth_provider.dart';
+import 'Landing_Page.dart';
+import 'widgets/connection_error_widget.dart';
+import 'utils/provider_wrapper.dart';
 
 void main() {
   runApp(const ResQApp());
@@ -32,8 +37,18 @@ class ResQApp extends StatelessWidget {
           backgroundColor: Colors.transparent,
         ),
       ),
-      home: const HomePage(),
+      home: const HomePageWrapper(),
     );
+  }
+}
+
+// Create a wrapper for HomePage with the required provider
+class HomePageWrapper extends StatelessWidget {
+  const HomePageWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderWrapper(child: const HomePage());
   }
 }
 
@@ -46,38 +61,126 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  bool _isLoading = true;
+  bool _isConnectionError = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  // Load user profile data
+  Future<void> _loadUserProfile() async {
+    setState(() {
+      _isLoading = true;
+      _isConnectionError = false;
+      _errorMessage = null;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.refreshUserProfile();
+
+      if (authProvider.status == AuthStatus.connectionError) {
+        setState(() {
+          _isConnectionError = true;
+          _errorMessage = authProvider.errorMessage;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Error loading profile: ${e.toString()}";
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Retry connection and reload data
+  Future<void> _retryConnection() async {
+    setState(() {
+      _isLoading = true;
+      _isConnectionError = false;
+      _errorMessage = null;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.retryConnection();
+
+      if (authProvider.status == AuthStatus.connectionError) {
+        setState(() {
+          _isConnectionError = true;
+          _errorMessage = authProvider.errorMessage;
+        });
+      } else {
+        await _loadUserProfile();
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Error retrying connection: ${e.toString()}";
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Logout handler
+  Future<void> _handleLogout() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.logout();
+
+    // Navigate back to landing page
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LandingPage()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final user = authProvider.user;
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              _buildSearchBar(),
-              _buildNavigationTabs(),
-              _buildHeroSection(),
-              _buildSectionTitle('Quick Access'),
-              _buildQuickAccessGrid(),
-              _buildSectionTitle('Emergency Services'),
-              _buildEmergencyServicesSection(),
-              _buildSectionTitle('Recommended'),
-              _buildRecommendedGrid(),
-              _buildSectionTitle('Recent Alerts'),
-              _buildRecentAlertsSection(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _isConnectionError
+              ? ConnectionErrorWidget(onRetry: _retryConnection)
+              : SafeArea(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(user?.fullName ?? 'User'),
+                      _buildSearchBar(),
+                      _buildNavigationTabs(),
+                      _buildHeroSection(),
+                      _buildSectionTitle('Quick Access'),
+                      _buildQuickAccessGrid(),
+                      _buildSectionTitle('Emergency Services'),
+                      _buildEmergencyServicesSection(),
+                      _buildSectionTitle('Recommended'),
+                      _buildRecommendedGrid(),
+                      _buildSectionTitle('Recent Alerts'),
+                      _buildRecentAlertsSection(),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(String userName) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 15, 20, 10),
       child: Row(
@@ -118,24 +221,13 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(height: 3),
-                  Row(
-                    children: const [
-                      Text(
-                        'Res',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Q',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFE53935),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    userName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -176,15 +268,77 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFE53935), width: 2),
-                  shape: BoxShape.circle,
-                ),
-                child: const CircleAvatar(
-                  radius: 16,
-                  backgroundImage: AssetImage('assets/images/profile.jpeg'),
+              GestureDetector(
+                onTap: () {
+                  // Show profile menu
+                  showModalBottomSheet(
+                    context: context,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                    ),
+                    builder:
+                        (context) => Container(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const ListTile(
+                                leading: Icon(
+                                  Icons.person,
+                                  color: Color(0xFFE53935),
+                                ),
+                                title: Text('My Profile'),
+                                trailing: Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                ),
+                              ),
+                              const ListTile(
+                                leading: Icon(
+                                  Icons.settings,
+                                  color: Color(0xFFE53935),
+                                ),
+                                title: Text('Settings'),
+                                trailing: Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                ),
+                              ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.logout,
+                                  color: Color(0xFFE53935),
+                                ),
+                                title: const Text('Logout'),
+                                trailing: const Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                ),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _handleLogout();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: const Color(0xFFE53935),
+                      width: 2,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const CircleAvatar(
+                    radius: 16,
+                    backgroundImage: AssetImage('assets/images/profile.jpeg'),
+                  ),
                 ),
               ),
             ],
