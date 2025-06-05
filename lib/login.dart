@@ -6,6 +6,9 @@ import 'signup.dart';
 import 'providers/auth_provider.dart';
 import 'widgets/connection_error_widget.dart';
 import 'utils/provider_wrapper.dart';
+import 'PoliceStationDashboard.dart';
+import 'FireStationDashboard.dart';
+import 'VolunteerDashboard.dart';
 
 // Create a wrapper for LoginPage with the required provider
 class LoginPageWrapper extends StatelessWidget {
@@ -291,11 +294,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           );
 
-          // Navigate to HomePage after successful login
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomePageWrapper()),
-          );
+          // Get the user's role and navigate accordingly
+          final userRole = authProvider.user?.role;
+          _navigateBasedOnRole(userRole);
         } else if (authProvider.status == AuthStatus.connectionError) {
           // Show connection error dialog
           _showConnectionErrorDialog(
@@ -314,6 +315,52 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       } finally {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  // New method to handle role-based navigation
+  void _navigateBasedOnRole(String? role) {
+    if (role == null) {
+      // Default to citizen dashboard if role is not specified
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+      );
+      return;
+    }
+
+    // Navigate based on role - using role constants from the API docs
+    switch (role) {
+      case 'CITIZEN':
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+        );
+        break;
+      case 'FIRE_STATION':
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const FireStationDashboard()),
+        );
+        break;
+      case 'POLICE':
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const PoliceDashboard()),
+        );
+        break;
+      case 'RED_CRESCENT':
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const VolunteerDashboard()),
+        );
+        break;
+      default:
+        // Default to citizen dashboard for unknown roles
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+        );
     }
   }
 

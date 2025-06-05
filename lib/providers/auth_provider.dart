@@ -255,6 +255,77 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // Add a getter to easily access the user role
+  String? get userRole => user?.role;
+
+  // Get the dashboard data based on the user's role
+  Future<Map<String, dynamic>?> getDashboardData() async {
+    try {
+      if (user == null) return null;
+
+      // Select the correct dashboard endpoint based on user role
+      String endpoint;
+
+      switch (user?.role) {
+        case 'CITIZEN':
+          endpoint = 'dashboards/citizen/';
+          break;
+        case 'FIRE_STATION':
+        case 'POLICE':
+        case 'RED_CRESCENT':
+          endpoint = 'dashboards/emergency-service/';
+          break;
+        default:
+          endpoint = 'dashboards/citizen/';
+      }
+
+      final response = await http.get(
+        Uri.parse(_buildUrl(endpoint)),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        _errorMessage = 'Failed to get dashboard data';
+        return null;
+      }
+    } catch (e) {
+      _errorMessage = 'Error: ${e.toString()}';
+      return null;
+    }
+  }
+
+  // Update emergency status
+  Future<Map<String, dynamic>?> updateEmergencyStatus(
+    String emergencyId,
+    String status,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_buildUrl('emergency/reports/$emergencyId/update_status/')),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'status': status}),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        _errorMessage = 'Failed to update emergency status';
+        return null;
+      }
+    } catch (e) {
+      _errorMessage = 'Error: ${e.toString()}';
+      return null;
+    }
+  }
+
   // Format error message from response data
   String _formatErrorMessage(Map<String, dynamic> data) {
     if (data.containsKey('detail')) {
