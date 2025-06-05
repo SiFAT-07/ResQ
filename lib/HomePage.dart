@@ -4,6 +4,7 @@ import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
 import 'widgets/connection_error_widget.dart';
 import 'utils/provider_wrapper.dart';
+import 'services/location_service.dart';
 
 void main() {
   runApp(const ResQApp());
@@ -64,11 +65,14 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = true;
   bool _isConnectionError = false;
   String? _errorMessage;
+  String? _cityName;
+  bool _isLoadingLocation = true;
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+    _getCurrentLocation();
   }
 
   // Load user profile data
@@ -142,6 +146,42 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // Get current location
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    
+    try {
+      final locationService = LocationService();
+      await locationService.getCurrentLocation(context);
+      final city = await locationService.getCityName(context);
+      
+      if (city != null) {
+        setState(() {
+          _cityName = city;
+          
+          // Update the provider with location data
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          authProvider.setUserLocation(
+            city, 
+            locationService.currentPosition?.latitude,
+            locationService.currentPosition?.longitude
+          );
+        });
+      } else {
+        setState(() {
+          _cityName = 'Unknown Location';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+      setState(() {
+        _cityName = 'Location Unavailable';
+      });
+    } finally {
+      setState(() => _isLoadingLocation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -181,6 +221,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHeader(String userName) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final displayCity = authProvider.city ?? _cityName ?? 'Tap to get location';
+    
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 15, 20, 10),
       child: Row(
@@ -237,34 +280,50 @@ class _HomePageState extends State<HomePage> {
           // Profile and location
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: const [
-                    Icon(Icons.location_on, color: Color(0xFFE53935), size: 16),
-                    SizedBox(width: 4),
-                    Text(
-                      'Dhaka, BD',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+              GestureDetector(
+                onTap: () {
+                  if (!_isLoadingLocation) {
+                    _getCurrentLocation();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      _isLoadingLocation 
+                          ? SizedBox(
+                              width: 16, 
+                              height: 16, 
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFE53935),
+                              ),
+                            )
+                          : Icon(Icons.location_on, color: Color(0xFFE53935), size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        displayCity,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 10),

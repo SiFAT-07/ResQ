@@ -9,6 +9,7 @@ import 'utils/provider_wrapper.dart';
 import 'PoliceStationDashboard.dart';
 import 'FireStationDashboard.dart';
 import 'VolunteerDashboard.dart';
+import 'services/location_service.dart';
 
 // Create a wrapper for LoginPage with the required provider
 class LoginPageWrapper extends StatelessWidget {
@@ -294,7 +295,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           );
 
-          // Get the user's role and navigate accordingly
+          // Request location permission after successful login
+          final locationService = LocationService();
+          await locationService.requestLocationPermission(context);
+
+          // Navigate based on user role
           final userRole = authProvider.user?.role;
           _navigateBasedOnRole(userRole);
         } else if (authProvider.status == AuthStatus.connectionError) {

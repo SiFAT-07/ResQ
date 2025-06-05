@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
+import 'services/location_service.dart';
 
 class VolunteerDashboard extends StatefulWidget {
   const VolunteerDashboard({super.key});
@@ -18,11 +19,14 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   List<dynamic> _pendingEmergencies = [];
   Map<String, dynamic> _statusCounts = {};
   int _unreadNotifications = 0;
+  bool _isLoadingLocation = true;
+  String? _cityName;
 
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+    _getCurrentLocation();
   }
 
   Future<void> _loadDashboardData() async {
@@ -60,10 +64,48 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     }
   }
 
+  // Get current location
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    
+    try {
+      final locationService = LocationService();
+      await locationService.getCurrentLocation(context);
+      final city = await locationService.getCityName(context);
+      
+      if (city != null) {
+        setState(() {
+          _cityName = city;
+          
+          // Update the provider with location data
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          authProvider.setUserLocation(
+            city, 
+            locationService.currentPosition?.latitude,
+            locationService.currentPosition?.longitude
+          );
+        });
+      } else {
+        setState(() {
+          _cityName = 'Unknown Location';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+      setState(() {
+        _cityName = 'Location Unavailable';
+      });
+    } finally {
+      setState(() => _isLoadingLocation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
     final teamName = user?.fullName ?? "Volunteer Team";
+    final authProvider = Provider.of<AuthProvider>(context);
+    final displayCity = authProvider.city ?? _cityName ?? 'Tap to get location';
 
     return Scaffold(
       key: _scaffoldKey,
@@ -102,26 +144,42 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.location_on, color: Colors.red[700], size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  'Dhaka, BD',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.red[700],
-                    fontWeight: FontWeight.w500,
+          GestureDetector(
+            onTap: () {
+              if (!_isLoadingLocation) {
+                _getCurrentLocation();
+              }
+            },
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  _isLoadingLocation 
+                      ? SizedBox(
+                          width: 16, 
+                          height: 16, 
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.red[700],
+                          ),
+                        )
+                      : Icon(Icons.location_on, color: Colors.red[700], size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    displayCity,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.red[700],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           CircleAvatar(

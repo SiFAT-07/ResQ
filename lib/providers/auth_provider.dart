@@ -51,6 +51,9 @@ class AuthProvider with ChangeNotifier {
   User? _user;
   AuthStatus _status = AuthStatus.initial;
   String? _errorMessage;
+  String? _city;
+  double? _latitude;
+  double? _longitude;
 
   // Base API URL - Updated to use 10.0.2.2 for Android emulator
   final String _baseUrl = 'http://10.0.2.2:8000/api';
@@ -67,6 +70,17 @@ class AuthProvider with ChangeNotifier {
   AuthStatus get status => _status;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   String? get errorMessage => _errorMessage;
+  String? get city => _city;
+  double? get latitude => _latitude;
+  double? get longitude => _longitude;
+
+  // Set user location
+  void setUserLocation(String? city, double? latitude, double? longitude) {
+    _city = city;
+    _latitude = latitude;
+    _longitude = longitude;
+    notifyListeners();
+  }
 
   // Login method
   Future<bool> login(String username, String password) async {
@@ -88,6 +102,21 @@ class AuthProvider with ChangeNotifier {
         _refreshToken = data['refresh'];
         _user = User.fromJson(data['user']);
         _status = AuthStatus.authenticated;
+
+        // Check if location data is available in the response
+        if (data['user'] != null &&
+            data['user']['location'] != null) {
+          final location = data['user']['location'];
+          if (location['city'] != null) {
+            _city = location['city'];
+          }
+          if (location['latitude'] != null) {
+            _latitude = location['latitude'];
+          }
+          if (location['longitude'] != null) {
+            _longitude = location['longitude'];
+          }
+        }
 
         notifyListeners();
         return true;
