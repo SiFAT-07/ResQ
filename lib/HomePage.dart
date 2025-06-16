@@ -155,7 +155,8 @@ class _HomePageState extends State<HomePage> {
       await locationService.getCurrentLocation(context);
       final city = await locationService.getCityName(context);
       
-      if (city != null) {
+      if (locationService.currentPosition != null) {
+        final position = locationService.currentPosition!;
         setState(() {
           _cityName = city;
           
@@ -163,8 +164,8 @@ class _HomePageState extends State<HomePage> {
           final authProvider = Provider.of<AuthProvider>(context, listen: false);
           authProvider.setUserLocation(
             city, 
-            locationService.currentPosition?.latitude,
-            locationService.currentPosition?.longitude
+            position.latitude,
+            position.longitude
           );
         });
       } else {
@@ -222,7 +223,11 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildHeader(String userName) {
     final authProvider = Provider.of<AuthProvider>(context);
-    final displayCity = authProvider.city ?? _cityName ?? 'Tap to get location';
+    
+    // Format coordinates to display instead of city name
+    final String locationText = (authProvider.latitude != null && authProvider.longitude != null) 
+        ? '${authProvider.latitude!.toStringAsFixed(6)}, ${authProvider.longitude!.toStringAsFixed(6)}'
+        : 'Tap to get location';
     
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 15, 20, 10),
@@ -316,9 +321,9 @@ class _HomePageState extends State<HomePage> {
                           : Icon(Icons.location_on, color: Color(0xFFE53935), size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        displayCity,
+                        locationText, // Now shows coordinates instead of city name
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 10, // Smaller font size to fit coordinates
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -394,9 +399,14 @@ class _HomePageState extends State<HomePage> {
                     ),
                     shape: BoxShape.circle,
                   ),
-                  child: const CircleAvatar(
+                  child: CircleAvatar(
                     radius: 16,
-                    backgroundImage: AssetImage('assets/images/profile.jpeg'),
+                    backgroundColor: Colors.red.shade50,
+                    child: Icon(
+                      Icons.person,
+                      color: Colors.red.shade700,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),

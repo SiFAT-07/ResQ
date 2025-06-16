@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'HomePage.dart';
 import 'signup.dart';
 import 'providers/auth_provider.dart';
@@ -41,6 +42,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   int _adminTapCount = 0;
   final String _adminUsername = "admin";
   final String _adminPassword = "admin123";
+
+  // Keys for storing credentials in SharedPreferences
+  static const String _rememberMeKey = 'remember_me';
+  static const String _usernameKey = 'saved_username';
+  static const String _passwordKey = 'saved_password';
 
   // Animation controllers
   late AnimationController _mainController;
@@ -89,6 +95,42 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
 
     _mainController.forward();
+
+    // Load saved credentials if they exist
+    _loadSavedCredentials();
+  }
+
+  // Load saved credentials from SharedPreferences
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedRememberMe = prefs.getBool(_rememberMeKey) ?? false;
+    
+    if (savedRememberMe) {
+      final savedUsername = prefs.getString(_usernameKey) ?? '';
+      final savedPassword = prefs.getString(_passwordKey) ?? '';
+      
+      setState(() {
+        rememberMe = savedRememberMe;
+        _usernameController.text = savedUsername;
+        _passwordController.text = savedPassword;
+      });
+    }
+  }
+
+  // Save credentials to SharedPreferences
+  Future<void> _saveCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    if (rememberMe) {
+      await prefs.setBool(_rememberMeKey, true);
+      await prefs.setString(_usernameKey, _usernameController.text);
+      await prefs.setString(_passwordKey, _passwordController.text);
+    } else {
+      // Clear saved credentials if "Remember Me" is unchecked
+      await prefs.setBool(_rememberMeKey, false);
+      await prefs.remove(_usernameKey);
+      await prefs.remove(_passwordKey);
+    }
   }
 
   @override
@@ -251,6 +293,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleLogin() async {
     if (_formKey.currentState?.validate() ?? false) {
       _formKey.currentState?.save();
+
+      // Save credentials based on "Remember Me" checkbox
+      await _saveCredentials();
 
       setState(() {
         _isLoading = true;
@@ -629,11 +674,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                           activeColor: primaryRed,
                                           checkColor: Colors.white,
                                           fillColor:
-                                              WidgetStateProperty.resolveWith<
+                                              MaterialStateProperty.resolveWith<
                                                 Color
-                                              >((Set<WidgetState> states) {
+                                              >((Set<MaterialState> states) {
                                                 if (states.contains(
-                                                  WidgetState.selected,
+                                                  MaterialState.selected,
                                                 )) {
                                                   return primaryRed;
                                                 }
@@ -650,11 +695,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        "Remember me",
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[700],
+                                      GestureDetector(
+                                        onTap: () {
+                                          setState(() => rememberMe = !rememberMe);
+                                        },
+                                        child: Text(
+                                          "Remember me",
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[700],
+                                          ),
                                         ),
                                       ),
                                     ],
