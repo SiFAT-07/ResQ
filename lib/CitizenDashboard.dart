@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
+import 'providers/auth_provider.dart';
+import 'services/location_service.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(ResQApp());
@@ -57,12 +62,13 @@ class _ResQDashboardState extends State<ResQDashboard>
   bool _showFirstAidDialog = false;
   bool _showReportDialog = false;
   int _selectedTab = 0;
-  final String _userLocation = "Current Location";
+  String _userLocation = "Fetching location..."; // Changed to be dynamic
   final String _userName = "Tarneem Zaman";
   String _emergencyStatus = "Safe";
   String _selectedReporterType = "";
   List<Map<String, dynamic>> _activeAlerts = [];
   Timer? _alertTimer;
+  bool _isLoadingLocation = true;
 
   late AnimationController _pulseController;
   late AnimationController _glowController;
@@ -113,6 +119,118 @@ class _ResQDashboardState extends State<ResQDashboard>
     ).animate(_glowController);
     _generateMockAlerts();
     _startAlertTimer();
+
+    // Add this to fetch the user location when the dashboard initializes
+    _getCurrentLocation();
+  }
+
+  // Updated method to get the current location with better error handling and emulator detection
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+      _userLocation = "Fetching location...";
+    });
+    
+    try {
+      // Check for location permissions first
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _userLocation = 'Location access denied';
+            _isLoadingLocation = false;
+          });
+          return;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          _userLocation = 'Location permission denied';
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Get the current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+      
+      // Check if this is an emulator with default position (common emulator location is Mountain View)
+      bool isEmulatorDefault = position.latitude == 37.4219983 && 
+                              position.longitude == -122.084;
+      
+      if (isEmulatorDefault) {
+        // For emulators, we'll use a more relevant default location or get it from the auth provider
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        if (authProvider.city != null && authProvider.city!.isNotEmpty) {
+          setState(() {
+            _userLocation = authProvider.city!;
+          });
+        } else {
+          // Use a default location that makes more sense for your app context
+          setState(() {
+            _userLocation = 'Dhaka'; // Or any other default city relevant to your users
+          });
+        }
+      } else {
+        // Real device with real coordinates - get actual location
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude, 
+          position.longitude
+        );
+
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks[0];
+          // Build location string based on available data
+          String locationName = "";
+          
+          // Prioritize locality (city)
+          if (place.locality != null && place.locality!.isNotEmpty) {
+            locationName = place.locality!;
+          } 
+          // Fall back to sublocality or administrative area if locality is empty
+          else if (place.subLocality != null && place.subLocality!.isNotEmpty) {
+            locationName = place.subLocality!;
+          }
+          else if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) {
+            locationName = place.administrativeArea!;
+          }
+          // Use country as a last resort
+          else if (place.country != null && place.country!.isNotEmpty) {
+            locationName = place.country!;
+          } else {
+            locationName = 'Unknown Location';
+          }
+          
+          // Update UI with location name
+          setState(() {
+            _userLocation = locationName;
+            
+            // Update the provider with location data
+            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+            authProvider.setUserLocation(
+              locationName,
+              position.latitude,
+              position.longitude
+            );
+          });
+        } else {
+          setState(() {
+            _userLocation = 'Location unavailable';
+          });
+        }
+      }
+    } catch (e) {
+      print('Error getting location: $e');
+      setState(() {
+        _userLocation = 'Location error';
+      });
+    } finally {
+      setState(() => _isLoadingLocation = false);
+    }
   }
 
   void _generateMockAlerts() {
@@ -164,6 +282,10 @@ class _ResQDashboardState extends State<ResQDashboard>
 
   @override
   Widget build(BuildContext context) {
+    // Remove this line as we're not using it and directly using _userLocation
+    // final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // final displayLocation = authProvider.city ?? _userLocation;
+
     return Scaffold(
       backgroundColor: bdrcsLightGray,
       body: Stack(
@@ -284,6 +406,38 @@ class _ResQDashboardState extends State<ResQDashboard>
                         color: bdrcsGray,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _isLoadingLocation ? null : _getCurrentLocation,
+                      child: Row(
+                        children: [
+                          _isLoadingLocation 
+                              ? SizedBox(
+                                  width: 14, 
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: bdrcsPrimary,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.location_on,
+                                  color: bdrcsPrimary,
+                                  size: 14,
+                                ),
+                          SizedBox(width: 4),
+                          Text(
+                            _userLocation,
+                            style: TextStyle(
+                              color: bdrcsGray,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   ],

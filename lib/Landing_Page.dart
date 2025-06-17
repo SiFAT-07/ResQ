@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'signup.dart';
 import 'login.dart';
+import 'AboutUs.dart'; // Import the AboutUs page
 
 void main() {
   runApp(const ResqEmergencyApp());
@@ -194,7 +195,7 @@ class _LandingPageState extends State<LandingPage>
 
             // Bottom Action Button with smooth animation (no blinking)
             Positioned(
-              bottom: 80,
+              bottom: 120, // Changed from 80 to 120 to move it higher up
               left: 0,
               right: 0,
               child: Center(
@@ -312,16 +313,59 @@ class _LandingPageState extends State<LandingPage>
                     ],
                   ),
                 ),
-                child: Center(
-                  child: Text(
-                    '© ${DateTime.now().year} ResQ Emergency Services',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black38,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 0.5,
+                child: Column(
+                  children: [
+                    // About Us button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AboutUsPage()),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'About Us',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    // Copyright text
+                    Text(
+                      '© ${DateTime.now().year} ResQ Emergency Services',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black38,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
