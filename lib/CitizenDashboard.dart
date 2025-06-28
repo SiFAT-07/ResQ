@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
-import 'services/location_service.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -1415,7 +1414,7 @@ class _ResQDashboardState extends State<ResQDashboard>
           _buildNavItem(Icons.home, 'Home', 0),
           _buildNavItem(Icons.warning_amber, 'Alerts', 1),
           _buildNavItem(Icons.phone, 'Contacts', 2),
-          _buildNavItem(Icons.person, 'Profile', 3),
+          _buildNavItem(Icons.chat_bubble_outline, 'Chatbot', 3),
         ],
       ),
     );
@@ -1450,6 +1449,10 @@ class _ResQDashboardState extends State<ResQDashboard>
       ),
     );
   }
+
+  
+
+
 
   Widget _buildReporterTypeDialog() {
     return Container(

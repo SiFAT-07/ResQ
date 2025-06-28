@@ -5,6 +5,10 @@ import 'Landing_Page.dart';
 import 'widgets/connection_error_widget.dart';
 import 'utils/provider_wrapper.dart';
 import 'services/location_service.dart';
+import 'MapPage.dart';
+import 'Chatbot.dart';
+import 'Report_Incident.dart';
+import 'victimReport.dart';
 
 void main() {
   runApp(const ResQApp());
@@ -217,7 +221,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      bottomNavigationBar: _buildBottomNavigationBar(context),
     );
   }
 
@@ -622,7 +626,97 @@ class _HomePageState extends State<HomePage> {
                           ),
                           const SizedBox(height: 15),
                           ElevatedButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    title: const Text(
+                                      'Report Emergency As',
+                                      style: TextStyle(
+                                        color: Color(0xFFE53935),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.pop(
+                                              context,
+                                            ); // Close the dialog
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder:
+                                                    (context) =>
+                                                        const ReportIncidentPage(),
+                                              ),
+                                            );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Color(0xFFE53935),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                              horizontal: 24,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Spectator',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.pop(
+                                              context,
+                                            ); // Close the popup
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder:
+                                                    (context) =>
+                                                        const VictimReportPage(), // update class name if needed
+                                              ),
+                                            );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: Color(0xFFE53935),
+                                            side: const BorderSide(
+                                              color: Color(0xFFE53935),
+                                              width: 2,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                              horizontal: 24,
+                                            ),
+                                          ),
+                                          child: const Text('Victim'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFFE53935),
@@ -1140,7 +1234,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBottomNavigationBar() {
+  Widget _buildBottomNavigationBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1158,8 +1252,8 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavBarItem(Icons.home_rounded, 'Home', 0),
-              _buildNavBarItem(Icons.map_rounded, 'Map', 1),
+              _buildNavBarItem(context,Icons.home_rounded, 'Home', 0),
+              _buildNavBarItem(context,Icons.map_rounded, 'Map', 1),
 
               // Center SOS button
               GestureDetector(
@@ -1190,8 +1284,27 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              _buildNavBarItem(Icons.notifications_rounded, 'Alerts', 2),
-              _buildNavBarItem(Icons.person_rounded, 'Profile', 3),
+              _buildNavBarItem(context, Icons.notifications_rounded, 'Alerts', 2),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ChatQHomePage()),
+                  );
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.message, color: Colors.grey, size: 24),
+                    SizedBox(height: 4),
+                    Text(
+                      'Chat',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
             ],
           ),
         ),
@@ -1199,12 +1312,19 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildNavBarItem(IconData icon, String label, int index) {
+  Widget _buildNavBarItem(BuildContext context, IconData icon, String label, int index) {
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _selectedIndex = index;
-        });
+        if (index == 1) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MapPage()),
+          );
+        } else {
+          setState(() {
+            _selectedIndex = index;
+          });
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

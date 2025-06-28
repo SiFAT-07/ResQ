@@ -674,11 +674,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                           activeColor: primaryRed,
                                           checkColor: Colors.white,
                                           fillColor:
-                                              MaterialStateProperty.resolveWith<
+                                              WidgetStateProperty.resolveWith<
                                                 Color
-                                              >((Set<MaterialState> states) {
+                                              >((Set<WidgetState> states) {
                                                 if (states.contains(
-                                                  MaterialState.selected,
+                                                  WidgetState.selected,
                                                 )) {
                                                   return primaryRed;
                                                 }

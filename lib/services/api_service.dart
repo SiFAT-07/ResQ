@@ -9,6 +9,7 @@ class ApiService {
   // Change base URL to use 10.0.2.2 for Android emulator instead of localhost
   static const String baseUrl = 'http://10.0.2.2:8000/api';
 
+
   // Connection timeout values
   static const int connectionTimeout = 15; // seconds
   static const int receiveTimeout = 15; // seconds
@@ -118,6 +119,8 @@ class ApiService {
     try {
       // Add debug printing to check what we're sending
       print("Attempting login with username: $username");
+      print("Sending login to: $baseUrl/users/login/");
+      print("🔥 API LOGIN URL → $baseUrl/users/login/");
       
       final response = await _handleRequest(
         http.post(
