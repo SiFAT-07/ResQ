@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
+// Model class for chat messages
+class ChatMessage {
+  final String text;
+  final bool isUser;
+  final DateTime timestamp;
 
+  ChatMessage({
+    required this.text,
+    required this.isUser,
+    required this.timestamp,
+  });
+}
 
-
-
+// Model class for chat sessions - we'll keep this but not use its full functionality
 class ChatSession {
   final String id;
   final String title;
@@ -29,9 +42,13 @@ class ChatQHomePage extends StatefulWidget {
 class _ChatQHomePageState extends State<ChatQHomePage> {
   final TextEditingController _mainInputController = TextEditingController();
   String _selectedMode = 'chat';
-  bool _isPremiumUser = false; // Set to true to test premium features
+  bool _isPremiumUser = false;
+  bool _isLoading = false;
 
-  // Updated to include guide content for each emergency type
+  // Chat message storage
+  List<ChatMessage> _messages = [];
+
+  // Use existing chatSessions for the guides
   final List<ChatSession> _chatSessions = [
     ChatSession(
       id: '1',
@@ -60,24 +77,170 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadChatHistory();
+    // Add welcome message
+    _addBotMessage(
+      "Hello! I'm your ResQ emergency assistant. How can I help you today? You can ask me about emergency procedures, safety tips, or how to use ResQ features.",
+    );
+  }
+
+  @override
   void dispose() {
     _mainInputController.dispose();
     super.dispose();
+  }
+
+  // Load chat history from SharedPreferences
+  Future<void> _loadChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatHistoryJson = prefs.getString('chat_history');
+
+      if (chatHistoryJson != null) {
+        final chatHistoryList = jsonDecode(chatHistoryJson) as List;
+        setState(() {
+          _messages =
+              chatHistoryList
+                  .map(
+                    (messageJson) => ChatMessage(
+                      text: messageJson['text'],
+                      isUser: messageJson['isUser'],
+                      timestamp: DateTime.parse(messageJson['timestamp']),
+                    ),
+                  )
+                  .toList();
+        });
+      }
+    } catch (e) {
+      print('Error loading chat history: $e');
+    }
+  }
+
+  // Save chat history to SharedPreferences
+  Future<void> _saveChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatHistoryList =
+          _messages
+              .map(
+                (message) => {
+                  'text': message.text,
+                  'isUser': message.isUser,
+                  'timestamp': message.timestamp.toIso8601String(),
+                },
+              )
+              .toList();
+
+      await prefs.setString('chat_history', jsonEncode(chatHistoryList));
+    } catch (e) {
+      print('Error saving chat history: $e');
+    }
+  }
+
+  void _addUserMessage(String message) {
+    setState(() {
+      _messages.add(
+        ChatMessage(text: message, isUser: true, timestamp: DateTime.now()),
+      );
+    });
+    _saveChatHistory();
+  }
+
+  void _addBotMessage(String message) {
+    setState(() {
+      _messages.add(
+        ChatMessage(text: message, isUser: false, timestamp: DateTime.now()),
+      );
+    });
+    _saveChatHistory();
+  }
+
+  // Handle chat input and generate responses based on input
+  Future<void> _handleMainInput() async {
+    final userInput = _mainInputController.text.trim();
+    if (userInput.isEmpty) return;
+
+    _addUserMessage(userInput);
+    _mainInputController.clear();
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Simulate a brief delay for the bot to "think"
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Generate a response based on keywords in the user input
+    final response = _generateResponse(userInput);
+    _addBotMessage(response);
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  // Simple keyword-based response generator (in a real app, this would be an API call)
+  String _generateResponse(String input) {
+    final lowerInput = input.toLowerCase();
+
+    // Emergency related keywords
+    if (lowerInput.contains('fire') || lowerInput.contains('burning')) {
+      return "If you're facing a fire emergency:\n\n1. Stay low to avoid smoke inhalation\n2. Use stairs, NOT elevators\n3. Feel doors before opening - if hot, find another exit\n4. Call emergency services immediately\n5. If trapped, seal doors with wet towels and signal from windows";
+    }
+
+    if (lowerInput.contains('flood') || lowerInput.contains('water')) {
+      return "For flood safety:\n\n1. Move to higher ground immediately\n2. Don't walk or drive through flood waters\n3. Disconnect utilities if safe to do so\n4. Prepare an emergency kit with food, water, medications\n5. Monitor emergency broadcasts for instructions";
+    }
+
+    if (lowerInput.contains('earthquake') ||
+        lowerInput.contains('building') ||
+        lowerInput.contains('collapse')) {
+      return "During an earthquake or building collapse:\n\n1. Drop, Cover, and Hold On\n2. Stay away from windows and exterior walls\n3. If trapped, protect your airway and tap on pipes/walls\n4. Don't use elevators\n5. After shaking stops, exit carefully and watch for hazards";
+    }
+
+    if (lowerInput.contains('medical') ||
+        lowerInput.contains('hurt') ||
+        lowerInput.contains('injury') ||
+        lowerInput.contains('bleeding')) {
+      return "For medical emergencies:\n\n1. Call emergency services immediately\n2. For bleeding: apply direct pressure with clean cloth\n3. For burns: cool with running water, don't use ice\n4. Keep the person still if spinal injury is suspected\n5. Perform CPR if trained and needed";
+    }
+
+    if (lowerInput.contains('sos') ||
+        lowerInput.contains('help') ||
+        lowerInput.contains('emergency')) {
+      return "To report an emergency through ResQ:\n\n1. Tap the SOS button on the home screen\n2. Choose whether you're a victim or spectator\n3. Provide details about the emergency\n4. Your location will automatically be shared with emergency services\n5. Stay on the line for further instructions";
+    }
+
+    if (lowerInput.contains('report') || lowerInput.contains('incident')) {
+      return "To report an incident in ResQ:\n\n1. Go to the home screen and tap 'Report Emergency'\n2. Select the incident type and provide details\n3. Upload photos if available\n4. Confirm your location or adjust if needed\n5. Submit your report to alert emergency services";
+    }
+
+    if (lowerInput.contains('contact') ||
+        lowerInput.contains('call') ||
+        lowerInput.contains('phone')) {
+      return "To contact emergency services through ResQ:\n\n1. Use the SOS button for immediate help\n2. For non-urgent situations, go to 'Emergency Contacts'\n3. Select the appropriate service type\n4. The app will connect you while sharing your location data\n5. Your emergency contacts will also be notified";
+    }
+
+    if (lowerInput.contains('hi') ||
+        lowerInput.contains('hello') ||
+        lowerInput.contains('hey')) {
+      return "Hi there! I'm your ResQ emergency assistant. How can I help you today? You can ask me about emergency procedures, safety guidelines, or how to use the ResQ app features.";
+    }
+
+    if (lowerInput.contains('thank')) {
+      return "You're welcome! Your safety is our priority. Is there anything else I can help you with?";
+    }
+
+    // Default response
+    return "I'm not sure I understand your question. Could you rephrase or ask about a specific emergency situation like fire, flood, earthquake, or medical emergencies? You can also ask about how to use ResQ features.";
   }
 
   void _handleLibrary() {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Opening Library')));
-  }
-
-  void _handleMainInput() {
-    if (_mainInputController.text.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Processing: ${_mainInputController.text}')),
-      );
-      _mainInputController.clear();
-    }
   }
 
   void _handleVoiceInput() {
@@ -93,57 +256,59 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.8,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.8,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            expand: false,
+            builder:
+                (context, scrollController) => Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      // Handle bar
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-              // Header - Removed the + button
-              const Row(
-                children: [
-                  Text(
-                    'Emergency Guides',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                      // Header - Removed the + button
+                      const Row(
+                        children: [
+                          Text(
+                            'Emergency Guides',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          Spacer(),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Chat Sessions List
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: _chatSessions.length,
+                          itemBuilder: (context, index) {
+                            final session = _chatSessions[index];
+                            return _buildChatSessionTile(session);
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                  Spacer(),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Chat Sessions List
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _chatSessions.length,
-                  itemBuilder: (context, index) {
-                    final session = _chatSessions[index];
-                    return _buildChatSessionTile(session);
-                  },
                 ),
-              ),
-            ],
           ),
-        ),
-      ),
     );
   }
 
@@ -161,7 +326,7 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
     } else {
       tileIcon = Icons.warning_amber_rounded;
     }
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -215,7 +380,7 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
     );
   }
 
-  // New method to show the emergency guide content
+  // Show the emergency guide content
   void _showEmergencyGuide(ChatSession guide) {
     Navigator.push(
       context,
@@ -253,6 +418,7 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
   }
 
   void _showProfileDetails() {
+    // Implementation kept from the original code
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -579,6 +745,18 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
           ],
         ),
         actions: [
+          // Emergency guides button
+          IconButton(
+            icon: const Icon(Icons.menu_book_outlined),
+            color: Colors.red,
+            onPressed: _showChatSessions,
+          ),
+          // Help button
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            color: Colors.grey[700],
+            onPressed: _showFAQPage,
+          ),
           // Premium upgrade button (only for non-premium users)
           if (!_isPremiumUser)
             Flexible(
@@ -605,276 +783,198 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
                 ),
               ),
             ),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey),
-                  SizedBox(width: 4),
-                  Text(
-                    'Temp',
-                    style: TextStyle(color: Colors.grey, fontSize: 10),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _showProfileDetails,
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: _isPremiumUser ? Colors.amber : Colors.red,
-              child:
-                  _isPremiumUser
-                      ? const Icon(
-                        Icons.workspace_premium,
-                        color: Colors.white,
-                        size: 18,
-                      )
-                      : const Icon(Icons.person, color: Colors.white, size: 18),
-            ),
-          ),
-          const SizedBox(width: 16),
         ],
       ),
       body: Column(
         children: [
-          // Navigation Menu - Only showing Emergency Guides
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              children: [
-                _buildMenuTile(
-                  icon: Icons.chat_bubble_outline,
-                  title: 'Emergency Guides',
-                  trailing: '${_chatSessions.length}',
-                  onTap: _showChatSessions,
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Main Content
+          // Main content - Chat messages
           Expanded(
-            child: SingleChildScrollView(
-              child: Container(
-                color: Colors.white,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    const Text(
-                      'How can I help in an emergency?',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Input Field - Removed voice input icon
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(25),
-                          border: Border.all(color: Colors.grey[300]!),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _mainInputController,
-                                onSubmitted: (_) => _handleMainInput(),
-                                decoration: const InputDecoration(
-                                  hintText: 'Describe the emergency situation',
-                                  hintStyle: TextStyle(color: Colors.grey),
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: _handleMainInput,
-                              icon: const Icon(Icons.send, color: Colors.red),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Action Buttons
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          _buildActionButton(
-                            icon: Icons.add_circle_outline,
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Creating new emergency guide'),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _buildActionButton(
-                            icon: Icons.search,
-                            label: 'Search',
-                            isHighlighted: _selectedMode == 'search',
-                            onPressed: () {
-                              setState(() {
-                                _selectedMode = 'search';
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Search mode activated'),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _buildActionButton(
-                            icon: Icons.psychology,
-                            label: 'Reason',
-                            isHighlighted: _selectedMode == 'reason',
-                            onPressed: () {
-                              setState(() {
-                                _selectedMode = 'reason';
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Reasoning mode activated'),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          _buildActionButton(
-                            icon: Icons.help_outline,
-                            onPressed: _showFAQPage,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    // FAQ Section - Updated text for emergency context
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey[200]!),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
-                              spreadRadius: 1,
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child:
+                  _messages.isEmpty
+                      ? Center(
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Container(
-                              width: 60,
-                              height: 60,
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: const Icon(
-                                Icons.help_outline,
-                                color: Colors.blue,
-                                size: 30,
-                              ),
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              size: 60,
+                              color: Colors.grey[300],
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'Emergency Safety Guidelines',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
                             Text(
-                              'Find safety tips and emergency procedures',
+                              'Ask me anything about emergency procedures',
                               style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
+                                fontSize: 16,
+                                color: Colors.grey[500],
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _showFAQPage,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.help_outline, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'View Safety Tips',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         ),
+                      )
+                      : ListView.builder(
+                        reverse: true,
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message =
+                              _messages[_messages.length - 1 - index];
+                          return _buildChatMessage(message);
+                        },
                       ),
-                    ),
+            ),
+          ),
 
-                    const SizedBox(height: 20),
-                  ],
-                ),
+          // Typing indicator
+          if (_isLoading)
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  const SizedBox(width: 20),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Thinking...',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+            ),
+
+          // Input field
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _mainInputController,
+                            decoration: const InputDecoration(
+                              hintText: 'Ask about emergency procedures...',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            onSubmitted: (_) => _handleMainInput(),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.mic, color: Colors.red),
+                          onPressed: _handleVoiceInput,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                    onPressed: _handleMainInput,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  // Build chat message bubble
+  Widget _buildChatMessage(ChatMessage message) {
+    return Align(
+      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: EdgeInsets.only(
+          top: 8,
+          bottom: 8,
+          left: message.isUser ? 64 : 8,
+          right: message.isUser ? 8 : 64,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: message.isUser ? Colors.red.shade500 : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message.text,
+              style: TextStyle(
+                color: message.isUser ? Colors.white : Colors.black87,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _formatTime(message.timestamp),
+              style: TextStyle(
+                color:
+                    message.isUser
+                        ? Colors.white.withOpacity(0.7)
+                        : Colors.grey.shade600,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    // Format time as HH:MM
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   Widget _buildMenuTile({
@@ -1094,33 +1194,28 @@ class PremiumDetailsPage extends StatelessWidget {
 
             _buildFeatureItem(
               Icons.chat_bubble_outline,
-              'Unlimited Conversations',
-              'No limits on the number of chats you can have',
+              'Advanced Emergency Guidance',
+              'Get personalized emergency response plans',
             ),
             _buildFeatureItem(
               Icons.flash_on,
               'Faster Response Times',
-              'Get priority access to our fastest AI models',
+              'Priority connection to emergency services',
             ),
             _buildFeatureItem(
               Icons.psychology,
-              'Advanced Reasoning',
-              'Access to our most sophisticated AI reasoning capabilities',
+              'AI-Powered Risk Assessment',
+              'Get real-time danger evaluation in emergencies',
             ),
             _buildFeatureItem(
               Icons.history,
-              'Extended Chat History',
-              'Keep your conversations forever with unlimited history',
-            ),
-            _buildFeatureItem(
-              Icons.file_download,
-              'Export Conversations',
-              'Download your chats in various formats',
+              'Extended Emergency History',
+              'Keep comprehensive records of all incidents',
             ),
             _buildFeatureItem(
               Icons.support_agent,
               'Priority Support',
-              'Get help faster with dedicated premium support',
+              '24/7 access to emergency specialists',
             ),
 
             const SizedBox(height: 32),
@@ -1273,14 +1368,12 @@ class PremiumDetailsPage extends StatelessWidget {
   }
 }
 
-// New class for Emergency Guide Detail Page
+// Emergency Guide Detail Page
 class EmergencyGuideDetailPage extends StatelessWidget {
   final String guideTitle;
-  
-  const EmergencyGuideDetailPage({
-    Key? key, 
-    required this.guideTitle,
-  }) : super(key: key);
+
+  const EmergencyGuideDetailPage({Key? key, required this.guideTitle})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -1327,7 +1420,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Guide content
             ..._getContentForGuide(guideTitle),
           ],
@@ -1335,7 +1428,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       ),
     );
   }
-  
+
   IconData _getIconForGuide(String title) {
     if (title.contains('Fire')) {
       return Icons.local_fire_department;
@@ -1349,7 +1442,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       return Icons.warning_amber_rounded;
     }
   }
-  
+
   List<Widget> _getContentForGuide(String title) {
     if (title.contains('Fire')) {
       return _getFireGuideContent();
@@ -1363,7 +1456,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       return [const Text('Guide content not available.')];
     }
   }
-  
+
   List<Widget> _getFireGuideContent() {
     return [
       _buildGuideSection('Evacuating a High-Rise Building', [
@@ -1389,7 +1482,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       ]),
     ];
   }
-  
+
   List<Widget> _getFloodGuideContent() {
     return [
       _buildGuideSection('Before a Flood', [
@@ -1414,7 +1507,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       ]),
     ];
   }
-  
+
   List<Widget> _getFirstAidGuideContent() {
     return [
       _buildGuideSection('Burn Treatment', [
@@ -1441,7 +1534,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       ]),
     ];
   }
-  
+
   List<Widget> _getBuildingCollapseGuideContent() {
     return [
       _buildGuideSection('If You Are Trapped', [
@@ -1466,7 +1559,7 @@ class EmergencyGuideDetailPage extends StatelessWidget {
       ]),
     ];
   }
-  
+
   Widget _buildGuideSection(String title, List<String> bullets) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1480,16 +1573,17 @@ class EmergencyGuideDetailPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        ...bullets.map((bullet) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            bullet,
-            style: const TextStyle(
-              fontSize: 16,
-              height: 1.5,
-            ),
-          ),
-        )).toList(),
+        ...bullets
+            .map(
+              (bullet) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  bullet,
+                  style: const TextStyle(fontSize: 16, height: 1.5),
+                ),
+              ),
+            )
+            .toList(),
         const SizedBox(height: 24),
       ],
     );
