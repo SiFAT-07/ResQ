@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'services/emergency_report_service.dart';
+import 'providers/auth_provider.dart';
+import 'Landing_Page.dart';
+import 'MapPage.dart';
 
 void main() {
   runApp(const MyApp());
@@ -49,6 +55,7 @@ class Emergency {
   final String id;
   final Priority priority;
   final String name;
+  final String status; // Added missing status property
   final int age;
   final String message;
   final String timeAgo;
@@ -68,6 +75,7 @@ class Emergency {
     required this.longitude,
     required this.isResponding,
     required this.incidentType,
+    this.status = 'PENDING', // Default value
   });
 }
 
@@ -85,10 +93,170 @@ class _PoliceDashboardState extends State<PoliceDashboard>
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // Status options for emergencies
+  final List<Map<String, String>> statusOptions = [
+    {'value': 'PENDING', 'label': 'Pending'},
+    {'value': 'RESPONDING', 'label': 'Responding'},
+    {'value': 'ON_SCENE', 'label': 'On Scene'},
+    {'value': 'RESOLVED', 'label': 'Resolved'},
+  ];
+
+  bool _isLoading = false;
+  List<dynamic> _apiEmergencies = [];
+  Map<String, int> _statusCounts = {
+    'pending': 0,
+    'responding': 0,
+    'on_scene': 0,
+    'resolved': 0,
+  };
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _fetchEmergencies();
+  }
+
+  // Fetch emergencies from the API
+  Future<void> _fetchEmergencies() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final apiEmergencies = await EmergencyReportService.getEmergencyReports(
+        context,
+      );
+
+      // Count emergencies by status
+      int pending = 0;
+      int responding = 0;
+      int onScene = 0;
+      int resolved = 0;
+
+      for (final emergency in apiEmergencies) {
+        final status = emergency['status'] ?? 'PENDING';
+        if (status == 'PENDING') {
+          pending++;
+        } else if (status == 'RESPONDING')
+          responding++;
+        else if (status == 'ON_SCENE')
+          onScene++;
+        else if (status == 'RESOLVED')
+          resolved++;
+      }
+
+      setState(() {
+        _apiEmergencies = apiEmergencies;
+        _statusCounts = {
+          'pending': pending,
+          'responding': responding,
+          'on_scene': onScene,
+          'resolved': resolved,
+        };
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching emergencies: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Update emergency status
+  Future<void> _updateEmergencyStatus(String id, String newStatus) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final success = await EmergencyReportService.updateEmergencyStatus(
+        context: context,
+        emergencyId: id,
+        status: newStatus,
+      );
+
+      if (success) {
+        // Refresh the emergency list
+        await _fetchEmergencies();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Emergency status updated successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update emergency status')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error updating status: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Show the status change dialog for API emergency objects
+  void _showStatusUpdateDialog(Map<String, dynamic> emergency) {
+    String selectedStatus = emergency['status'] ?? 'PENDING';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Update Emergency Status'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Current Status: ${emergency['status'] ?? 'PENDING'}'),
+              const SizedBox(height: 16),
+              Text('Select new status:'),
+              const SizedBox(height: 8),
+              ...statusOptions.map(
+                (status) => RadioListTile<String>(
+                  title: Text(status['label']!),
+                  value: status['value']!,
+                  groupValue: selectedStatus,
+                  onChanged: (value) {
+                    if (value != null) {
+                      selectedStatus = value;
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _updateEmergencyStatus(emergency['id'], selectedStatus);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text('Update'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Get the status label from the status code
+  String _getStatusLabel(Emergency emergency) {
+    if (emergency.isResponding) {
+      return 'Responding';
+    } else {
+      return 'Pending';
+    }
   }
 
   @override
@@ -374,14 +542,14 @@ class _PoliceDashboardState extends State<PoliceDashboard>
             children: [
               _buildStatCard(
                 'Total Emergencies',
-                '24',
+                '${_apiEmergencies.length}',
                 Colors.red,
                 Icons.emergency,
               ),
               const SizedBox(width: 16),
               _buildStatCard(
                 'Active Responses',
-                '8',
+                '${_statusCounts['responding'] ?? 0}',
                 Colors.green,
                 Icons.local_police,
               ),
@@ -392,14 +560,14 @@ class _PoliceDashboardState extends State<PoliceDashboard>
             children: [
               _buildStatCard(
                 'Critical Incidents',
-                '5',
+                '${_apiEmergencies.where((e) => (e['priority'] ?? '') == 'CRITICAL').length}',
                 Colors.red[900]!,
                 Icons.warning,
               ),
               const SizedBox(width: 16),
               _buildStatCard(
                 'Resolved Today',
-                '12',
+                '${_statusCounts['resolved'] ?? 0}',
                 Colors.blue,
                 Icons.check_circle,
               ),
@@ -534,22 +702,32 @@ class _PoliceDashboardState extends State<PoliceDashboard>
   }
 
   Widget _buildEmergencyList({bool showAll = false}) {
-    List<Emergency> filteredEmergencies =
-        emergencies.where((emergency) {
-          if (showAssignedOnly && !emergency.isResponding) {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
+    // Filter the API emergencies based on selected filters
+    List<dynamic> filteredEmergencies =
+        _apiEmergencies.where((emergency) {
+          // Check if assigned only filter is applied
+          if (showAssignedOnly && (emergency['status'] ?? '') != 'RESPONDING') {
             return false;
           }
 
+          // Apply incident type filter
           if (selectedFilter == 'All') {
             return true;
           } else if (selectedFilter == 'Critical') {
-            return emergency.priority == Priority.critical;
+            return (emergency['priority'] ?? '') == 'CRITICAL';
           } else if (selectedFilter == 'Medical') {
-            return emergency.incidentType == 'Medical';
+            final type = emergency['incident_type'] ?? '';
+            return type.toLowerCase().contains('medical');
           } else if (selectedFilter == 'Theft') {
-            return emergency.incidentType == 'Theft';
+            final type = emergency['incident_type'] ?? '';
+            return type.toLowerCase().contains('theft');
           } else if (selectedFilter == 'Assault') {
-            return emergency.incidentType == 'Assault';
+            final type = emergency['incident_type'] ?? '';
+            return type.toLowerCase().contains('assault');
           }
 
           return true;
@@ -583,32 +761,50 @@ class _PoliceDashboardState extends State<PoliceDashboard>
     );
   }
 
-  Widget _buildEmergencyCard(Emergency emergency) {
+  Widget _buildEmergencyCard(Map<String, dynamic> emergency) {
+    final String status = emergency['status'] ?? 'PENDING';
+    final String priority = emergency['priority'] ?? 'MODERATE';
+    final bool isResponding = status == 'RESPONDING' || status == 'ON_SCENE';
+    final String reporter = emergency['reporter_name'] ?? 'Anonymous';
+    final String reporterAge = emergency['reporter_age']?.toString() ?? '';
+    final String reporterInfo =
+        reporterAge.isEmpty ? reporter : '$reporter • $reporterAge yrs';
+    final String message =
+        emergency['description'] ?? 'No description provided';
+    final String timeAgo = emergency['created_at'] ?? 'Recently';
+    final String incidentType =
+        emergency['incident_type'] ?? 'General Incident';
+
     Color statusColor;
     IconData priorityIcon;
     String priorityText;
 
-    switch (emergency.priority) {
-      case Priority.critical:
+    // Set colors and icons based on priority
+    switch (priority) {
+      case 'CRITICAL':
         statusColor = Colors.red;
         priorityIcon = Icons.warning;
         priorityText = 'Critical';
         break;
-      case Priority.high:
+      case 'HIGH':
         statusColor = Colors.deepOrange;
         priorityIcon = Icons.priority_high;
         priorityText = 'High';
         break;
-      case Priority.moderate:
+      case 'MODERATE':
         statusColor = Colors.orange;
         priorityIcon = Icons.report_problem;
         priorityText = 'Moderate';
         break;
-      case Priority.low:
+      case 'LOW':
         statusColor = Colors.blue;
         priorityIcon = Icons.info;
         priorityText = 'Low';
         break;
+      default:
+        statusColor = Colors.grey;
+        priorityIcon = Icons.help_outline;
+        priorityText = priority;
     }
 
     return Card(
@@ -639,14 +835,14 @@ class _PoliceDashboardState extends State<PoliceDashboard>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        emergency.incidentType,
+                        incidentType,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        '${emergency.name} • ${emergency.age} yrs',
+                        reporterInfo,
                         style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
                     ],
@@ -676,7 +872,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
           Padding(
             padding: const EdgeInsets.all(12),
             child: Text(
-              '"${emergency.message}"',
+              message,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ),
@@ -685,11 +881,11 @@ class _PoliceDashboardState extends State<PoliceDashboard>
             child: Row(
               children: [
                 Text(
-                  emergency.timeAgo,
+                  timeAgo,
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
                 const Spacer(),
-                if (emergency.isResponding)
+                if (isResponding)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -699,12 +895,12 @@ class _PoliceDashboardState extends State<PoliceDashboard>
                       color: Colors.green.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(Icons.check_circle, color: Colors.green, size: 14),
                         SizedBox(width: 4),
                         Text(
-                          'Responding',
+                          status,
                           style: TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.w500,
@@ -724,15 +920,12 @@ class _PoliceDashboardState extends State<PoliceDashboard>
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () {
-                    setState(() {
-                      emergency.isResponding = !emergency.isResponding;
-                    });
+                    _showStatusUpdateDialog(emergency);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        emergency.isResponding ? Colors.grey : Colors.red,
+                    backgroundColor: isResponding ? Colors.grey : Colors.red,
                   ),
-                  child: Text(emergency.isResponding ? 'Cancel' : 'Respond'),
+                  child: Text(isResponding ? 'Update' : 'Respond'),
                 ),
               ],
             ),
@@ -742,7 +935,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
     );
   }
 
-  void _showEmergencyDetailsDialog(Emergency emergency) {
+  void _showEmergencyDetailsDialog(Map<String, dynamic> emergency) {
     showDialog(
       context: context,
       builder:
@@ -750,11 +943,11 @@ class _PoliceDashboardState extends State<PoliceDashboard>
             title: Row(
               children: [
                 Icon(
-                  _getPriorityIcon(emergency.priority),
-                  color: _getPriorityColor(emergency.priority),
+                  _getPriorityIcon(emergency['priority'] ?? 'MODERATE'),
+                  color: _getStatusColor(emergency['status'] ?? 'PENDING'),
                 ),
                 const SizedBox(width: 8),
-                Text('${emergency.incidentType} Emergency'),
+                Text('${emergency['incident_type'] ?? 'Emergency'} Details'),
               ],
             ),
             content: Column(
@@ -763,17 +956,45 @@ class _PoliceDashboardState extends State<PoliceDashboard>
               children: [
                 _detailRow(
                   'Reported by',
-                  '${emergency.name}, ${emergency.age} yrs',
+                  emergency['reporter_name'] ?? 'Anonymous',
                 ),
-                _detailRow('Message', '"${emergency.message}"'),
-                _detailRow('Time', emergency.timeAgo),
-                _detailRow(
-                  'Status',
-                  emergency.isResponding ? 'Responding' : 'Not Responding',
-                ),
-                _detailRow(
-                  'Location',
-                  'Lat: ${emergency.latitude}, Long: ${emergency.longitude}',
+                _detailRow('Message', emergency['description'] ?? ''),
+                _detailRow('Time', emergency['created_at'] ?? ''),
+                _detailRow('Status', emergency['status'] ?? 'PENDING'),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openMapWithLocation(
+                      emergency['latitude'] as double?,
+                      emergency['longitude'] as double?,
+                    );
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        child: Text(
+                          'Location:',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Lat: ${emergency['latitude']}, Long: ${emergency['longitude']}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 16,
+                        color: Colors.blue[600],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -786,18 +1007,11 @@ class _PoliceDashboardState extends State<PoliceDashboard>
               ),
               ElevatedButton(
                 onPressed: () {
-                  setState(() {
-                    emergency.isResponding = !emergency.isResponding;
-                  });
                   Navigator.of(context).pop();
+                  _showStatusUpdateDialog(emergency);
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      emergency.isResponding ? Colors.grey : Colors.red,
-                ),
-                child: Text(
-                  emergency.isResponding ? 'Cancel Response' : 'Respond',
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: Text('Update Status'),
               ),
             ],
           ),
@@ -853,29 +1067,66 @@ class _PoliceDashboardState extends State<PoliceDashboard>
     );
   }
 
-  Color _getPriorityColor(Priority priority) {
-    switch (priority) {
-      case Priority.critical:
-        return Colors.red;
-      case Priority.high:
-        return Colors.deepOrange;
-      case Priority.moderate:
+  // Add a method to open MapPage with specific location
+  void _openMapWithLocation(double? latitude, double? longitude) {
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location coordinates not available')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => MapPage(initialLocation: LatLng(latitude, longitude)),
+      ),
+    );
+  }
+
+  // Keep only one version of _getStatusColor and _getPriorityIcon methods and delete the duplicates
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'PENDING':
         return Colors.orange;
-      case Priority.low:
+      case 'RESPONDING':
         return Colors.blue;
+      case 'ON_SCENE':
+        return Colors.green;
+      case 'RESOLVED':
+        return Colors.grey;
+      default:
+        return Colors.red;
     }
   }
 
-  IconData _getPriorityIcon(Priority priority) {
+  // Helper method to get priority icon for API emergencies
+  IconData _getPriorityIcon(String priority) {
     switch (priority) {
-      case Priority.critical:
+      case 'CRITICAL':
         return Icons.warning;
-      case Priority.high:
+      case 'HIGH':
         return Icons.priority_high;
-      case Priority.moderate:
+      case 'MODERATE':
         return Icons.report_problem;
-      case Priority.low:
+      case 'LOW':
         return Icons.info;
+      default:
+        return Icons.help_outline;
     }
+  }
+
+  // Fix logout method - there's only one version needed
+  Future<void> _handleLogout() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.logout();
+
+    // Navigate back to landing page
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LandingPage()),
+      (route) => false,
+    );
   }
 }

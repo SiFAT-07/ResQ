@@ -8,7 +8,9 @@ import 'package:location/location.dart';
 import 'package:http/http.dart' as http;
 
 class MapPage extends StatefulWidget {
-  const MapPage({Key? key}) : super(key: key);
+  final LatLng? initialLocation;
+  
+  const MapPage({super.key, this.initialLocation});
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -31,6 +33,31 @@ class _MapPageState extends State<MapPage> {
   void initState() {
     super.initState();
     _trackLocation();
+    
+    // If initialLocation is provided, update the camera position
+    if (widget.initialLocation != null) {
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (_mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLngZoom(widget.initialLocation!, 15),
+          );
+          
+          // Also add a marker at this location
+          setState(() {
+            _markers.add(
+              Marker(
+                markerId: MarkerId('destination'),
+                position: widget.initialLocation!,
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                infoWindow: InfoWindow(
+                  title: 'Emergency Location',
+                ),
+              ),
+            );
+          });
+        }
+      });
+    }
   }
 
   Future<void> _trackLocation() async {
@@ -54,26 +81,40 @@ class _MapPageState extends State<MapPage> {
     final pos = LatLng(lat, lng);
     setState(() {
       _current = pos;
-      _addOrUpdateMarker("user", pos, BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed), "You are here");
+      _addOrUpdateMarker(
+        "user",
+        pos,
+        BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        "You are here",
+      );
     });
     _mapController?.animateCamera(CameraUpdate.newLatLngZoom(pos, 15));
   }
 
-  void _addOrUpdateMarker(String id, LatLng pos, BitmapDescriptor icon, String title, {String? placeId}) {
+  void _addOrUpdateMarker(
+    String id,
+    LatLng pos,
+    BitmapDescriptor icon,
+    String title, {
+    String? placeId,
+  }) {
     _markers.removeWhere((m) => m.markerId.value == id);
-    _markers.add(Marker(
-      markerId: MarkerId(id),
-      position: pos,
-      icon: icon,
-      infoWindow: InfoWindow(
-        title: title,
-        onTap: placeId != null ? () => _fetchPlaceDetails(placeId) : null,
+    _markers.add(
+      Marker(
+        markerId: MarkerId(id),
+        position: pos,
+        icon: icon,
+        infoWindow: InfoWindow(
+          title: title,
+          onTap: placeId != null ? () => _fetchPlaceDetails(placeId) : null,
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> _fetchPlaceDetails(String placeId) async {
-    final url = 'https://maps.googleapis.com/maps/api/place/details/json'
+    final url =
+        'https://maps.googleapis.com/maps/api/place/details/json'
         '?place_id=$placeId&key=$placesApiKey';
 
     final res = await http.get(Uri.parse(url));
@@ -92,11 +133,17 @@ class _MapPageState extends State<MapPage> {
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(name),
-        content: Text('Address: $address\nPhone: $phone\nRating: $rating'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],
-      ),
+      builder:
+          (_) => AlertDialog(
+            title: Text(name),
+            content: Text('Address: $address\nPhone: $phone\nRating: $rating'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Close"),
+              ),
+            ],
+          ),
     );
   }
 
@@ -106,13 +153,18 @@ class _MapPageState extends State<MapPage> {
     final dLng = (b.longitude - a.longitude) * pi / 180.0;
     final lat1 = a.latitude * pi / 180.0;
     final lat2 = b.latitude * pi / 180.0;
-    final aHarv = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLng / 2) * sin(dLng / 2);
+    final aHarv =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) * sin(dLng / 2) * sin(dLng / 2);
     final c = 2 * atan2(sqrt(aHarv), sqrt(1 - aHarv));
     return earthRadius * c;
   }
 
   Future<void> _findNearestFireStation() async {
-    await _findNearestAccurate('Fire Service and Civil Defence Station', Colors.deepOrange);
+    await _findNearestAccurate(
+      'Fire Service and Civil Defence Station',
+      Colors.deepOrange,
+    );
   }
 
   Future<void> _findNearestFamousHospital() async {
@@ -141,8 +193,9 @@ class _MapPageState extends State<MapPage> {
       if (!types.contains('hospital')) continue;
       if (!(name.contains('hospital') ||
           name.contains('clinic') ||
-          name.contains('medical')))
+          name.contains('medical'))) {
         continue;
+      }
 
       final lat = result['geometry']['location']['lat'];
       final lng = result['geometry']['location']['lng'];
@@ -234,16 +287,26 @@ class _MapPageState extends State<MapPage> {
 
     setState(() {
       _polylines.clear();
-      _polylines.add(Polyline(
-        polylineId: PolylineId('$keyword-route'),
-        points: route,
-        width: 5,
-        color: lineColor,
-      ));
-      _addOrUpdateMarker(keyword, pos, BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure), name, placeId: placeId);
+      _polylines.add(
+        Polyline(
+          polylineId: PolylineId('$keyword-route'),
+          points: route,
+          width: 5,
+          color: lineColor,
+        ),
+      );
+      _addOrUpdateMarker(
+        keyword,
+        pos,
+        BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        name,
+        placeId: placeId,
+      );
     });
 
-    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(_getBounds(_current!, pos), 80));
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(_getBounds(_current!, pos), 80),
+    );
   }
 
   Future<List<LatLng>?> _getRoute(LatLng start, LatLng end) async {
@@ -320,18 +383,36 @@ class _MapPageState extends State<MapPage> {
   void _showMarkerOptionsDialog(String type) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("Report $type"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CheckboxListTile(title: const Text("Too much Water"), value: false, onChanged: (_) {}),
-            CheckboxListTile(title: const Text("Little amount of water"), value: false, onChanged: (_) {}),
-            CheckboxListTile(title: const Text("Previously Used?"), value: false, onChanged: (_) {}),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close"))],
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text("Report $type"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CheckboxListTile(
+                  title: const Text("Too much Water"),
+                  value: false,
+                  onChanged: (_) {},
+                ),
+                CheckboxListTile(
+                  title: const Text("Little amount of water"),
+                  value: false,
+                  onChanged: (_) {},
+                ),
+                CheckboxListTile(
+                  title: const Text("Previously Used?"),
+                  value: false,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Close"),
+              ),
+            ],
+          ),
     );
   }
 
@@ -364,9 +445,11 @@ class _MapPageState extends State<MapPage> {
               icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
               onPressed: () => Navigator.pop(context),
               style: ButtonStyle(
-                backgroundColor: MaterialStateProperty.all<Color>(Colors.white70),
-                shape: MaterialStateProperty.all(
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                backgroundColor: WidgetStateProperty.all<Color>(Colors.white70),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                 ),
               ),
             ),
@@ -390,8 +473,24 @@ class _MapPageState extends State<MapPage> {
                   }),
                   _fab(Icons.local_hospital, _findNearestFamousHospital),
                   _fab(Icons.local_fire_department, _findNearestFireStation),
-                  _fab(Icons.water_drop, () => _addCustomMarker('water_source', BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan))),
-                  _fab(Icons.warning, () => _addCustomMarker('danger_zone', BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange))),
+                  _fab(
+                    Icons.water_drop,
+                    () => _addCustomMarker(
+                      'water_source',
+                      BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueCyan,
+                      ),
+                    ),
+                  ),
+                  _fab(
+                    Icons.warning,
+                    () => _addCustomMarker(
+                      'danger_zone',
+                      BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueOrange,
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -402,11 +501,11 @@ class _MapPageState extends State<MapPage> {
   }
 
   Widget _fab(IconData icon, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: FloatingActionButton.small(
-          backgroundColor: Colors.red,
-          onPressed: onTap,
-          child: Icon(icon, size: 20, color: Colors.white),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: FloatingActionButton.small(
+      backgroundColor: Colors.red,
+      onPressed: onTap,
+      child: Icon(icon, size: 20, color: Colors.white),
+    ),
+  );
 }

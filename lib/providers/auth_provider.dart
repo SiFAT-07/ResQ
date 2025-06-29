@@ -104,8 +104,7 @@ class AuthProvider with ChangeNotifier {
         _status = AuthStatus.authenticated;
 
         // Check if location data is available in the response
-        if (data['user'] != null &&
-            data['user']['location'] != null) {
+        if (data['user'] != null && data['user']['location'] != null) {
           final location = data['user']['location'];
           if (location['city'] != null) {
             _city = location['city'];
@@ -287,29 +286,13 @@ class AuthProvider with ChangeNotifier {
   // Add a getter to easily access the user role
   String? get userRole => user?.role;
 
-  // Get the dashboard data based on the user's role
+  // Get the dashboard data using emergency reports endpoint
   Future<Map<String, dynamic>?> getDashboardData() async {
     try {
       if (user == null) return null;
 
-      // Select the correct dashboard endpoint based on user role
-      String endpoint;
-
-      switch (user?.role) {
-        case 'CITIZEN':
-          endpoint = 'dashboards/citizen/';
-          break;
-        case 'FIRE_STATION':
-        case 'POLICE':
-        case 'RED_CRESCENT':
-          endpoint = 'dashboards/emergency-service/';
-          break;
-        default:
-          endpoint = 'dashboards/citizen/';
-      }
-
       final response = await http.get(
-        Uri.parse(_buildUrl(endpoint)),
+        Uri.parse(_buildUrl('emergency/reports/')),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
@@ -317,9 +300,32 @@ class AuthProvider with ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final reports = jsonDecode(response.body);
+
+        // Count status occurrences
+        int pending = 0;
+        int responding = 0;
+        int onScene = 0;
+
+        for (final report in reports) {
+          final status = report['status'] ?? 'PENDING';
+          if (status == 'PENDING') pending++;
+          if (status == 'RESPONDING') responding++;
+          if (status == 'ON_SCENE') onScene++;
+        }
+
+        // Format data to match expected dashboard structure
+        return {
+          'current_status': {
+            'pending': pending,
+            'responding': responding,
+            'on_scene': onScene,
+          },
+          'pending_emergencies':
+              reports.where((r) => r['status'] == 'PENDING').toList(),
+        };
       } else {
-        _errorMessage = 'Failed to get dashboard data';
+        _errorMessage = 'Failed to get emergency reports';
         return null;
       }
     } catch (e) {
@@ -334,8 +340,9 @@ class AuthProvider with ChangeNotifier {
     String status,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse(_buildUrl('emergency/reports/$emergencyId/update_status/')),
+      // Correct API endpoint format: emergency/reports/{id}/
+      final response = await http.patch(
+        Uri.parse(_buildUrl('emergency/reports/$emergencyId/')),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
@@ -346,7 +353,9 @@ class AuthProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        _errorMessage = 'Failed to update emergency status';
+        _errorMessage =
+            'Failed to update emergency status: ${response.statusCode}';
+        debugPrint('Error response: ${response.body}');
         return null;
       }
     } catch (e) {

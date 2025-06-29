@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-
-
+import 'services/emergency_report_service.dart'; // Add this import
+// Add this import for Provider
+// Add this import for AuthProvider
 
 class VictimReportPage extends StatefulWidget {
   const VictimReportPage({super.key});
@@ -83,6 +84,10 @@ class _VictimReportPageState extends State<VictimReportPage>
     'Don\'t Know',
   ];
 
+  Position?
+  _currentPosition; // Add this to store the position for sending to backend
+  bool _isSendingSOS = false; // Add this to track SOS sending state
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +151,7 @@ class _VictimReportPageState extends State<VictimReportPage>
 
     setState(() {
       isLocationFetched = true;
+      _currentPosition = position; // Store the position for API call
       currentLocation =
           '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
     });
@@ -348,7 +354,8 @@ class _VictimReportPageState extends State<VictimReportPage>
               return Transform.scale(
                 scale: _pulseAnimation.value,
                 child: GestureDetector(
-                  onTap: _sendSOS,
+                  onTap:
+                      _isSendingSOS ? null : _sendSOS, // Disable while sending
                   child: Container(
                     width: 140,
                     height: 140,
@@ -366,16 +373,21 @@ class _VictimReportPageState extends State<VictimReportPage>
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Text(
-                        'SOS',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
+                    child: Center(
+                      child:
+                          _isSendingSOS
+                              ? CircularProgressIndicator(
+                                color: Colors.white,
+                              ) // Show loading indicator
+                              : const Text(
+                                'SOS',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                ),
+                              ),
                     ),
                   ),
                 ),
@@ -655,7 +667,7 @@ class _VictimReportPageState extends State<VictimReportPage>
                                       ),
                                     ),
                                   );
-                                }).toList(),
+                                }),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -829,7 +841,7 @@ class _VictimReportPageState extends State<VictimReportPage>
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -899,7 +911,61 @@ class _VictimReportPageState extends State<VictimReportPage>
     );
   }
 
-  void _sendSOS() {
+  // Updated _sendSOS to actually send data to backend
+  Future<void> _sendSOS() async {
+    // Check if we have location
+    if (!isLocationFetched || _currentPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot get your location. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSendingSOS = true;
+    });
+
+    try {
+      // Create emergency details
+      Map<String, dynamic> emergencyDetails = {
+        'description':
+            'URGENT VICTIM SOS: Immediate assistance required! Victim in imminent danger.',
+        'reporter_type': 'VICTIM', // Explicitly mark as victim
+        'is_emergency': true,
+        'priority': 'CRITICAL',
+      };
+
+      // Send to backend API
+      final success = await EmergencyReportService.submitEmergencyReport(
+        context: context,
+        incidentType: 'Emergency SOS',
+        details: emergencyDetails,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+      );
+
+      if (success) {
+        _showSOSSuccessDialog();
+      } else {
+        _showSOSErrorDialog(
+          'Failed to send emergency alert. Please try again.',
+        );
+      }
+    } catch (e) {
+      print('Error sending SOS: $e');
+      _showSOSErrorDialog(
+        'An error occurred while sending your emergency alert.',
+      );
+    } finally {
+      setState(() {
+        _isSendingSOS = false;
+      });
+    }
+  }
+
+  void _showSOSSuccessDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -916,10 +982,14 @@ class _VictimReportPageState extends State<VictimReportPage>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: primaryRed.withOpacity(0.1),
+                    color: Colors.green.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.emergency, color: primaryRed, size: 48),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 48,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -932,7 +1002,7 @@ class _VictimReportPageState extends State<VictimReportPage>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Emergency services have been notified of your location.',
+                  'Emergency services have been notified of your location. Help is on the way.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -949,10 +1019,10 @@ class _VictimReportPageState extends State<VictimReportPage>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      Icon(Icons.priority_high, color: Colors.green, size: 16),
                       const SizedBox(width: 8),
                       Text(
-                        'Help is on the way',
+                        'Priority: CRITICAL',
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.w600,
@@ -982,7 +1052,27 @@ class _VictimReportPageState extends State<VictimReportPage>
     );
   }
 
+  void _showSOSErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _submitReport() {
+    // Replace with actual API call when implementing form submission
+    // Similar to _sendSOS but with detailed form data
     showDialog(
       context: context,
       barrierDismissible: false,

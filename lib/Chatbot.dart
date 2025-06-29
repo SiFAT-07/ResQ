@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Model class for chat messages
@@ -33,7 +32,7 @@ class ChatSession {
 }
 
 class ChatQHomePage extends StatefulWidget {
-  const ChatQHomePage({Key? key}) : super(key: key);
+  const ChatQHomePage({super.key});
 
   @override
   State<ChatQHomePage> createState() => _ChatQHomePageState();
@@ -41,8 +40,8 @@ class ChatQHomePage extends StatefulWidget {
 
 class _ChatQHomePageState extends State<ChatQHomePage> {
   final TextEditingController _mainInputController = TextEditingController();
-  String _selectedMode = 'chat';
-  bool _isPremiumUser = false;
+  final String _selectedMode = 'chat';
+  final bool _isPremiumUser = false;
   bool _isLoading = false;
 
   // Chat message storage
@@ -1050,7 +1049,7 @@ class _ChatQHomePageState extends State<ChatQHomePage> {
 
 // FAQ Page with updated emergency-focused questions
 class FAQPage extends StatelessWidget {
-  const FAQPage({Key? key}) : super(key: key);
+  const FAQPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1125,7 +1124,7 @@ class FAQPage extends StatelessWidget {
 
 // Premium Details Page
 class PremiumDetailsPage extends StatelessWidget {
-  const PremiumDetailsPage({Key? key}) : super(key: key);
+  const PremiumDetailsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1372,8 +1371,7 @@ class PremiumDetailsPage extends StatelessWidget {
 class EmergencyGuideDetailPage extends StatelessWidget {
   final String guideTitle;
 
-  const EmergencyGuideDetailPage({Key? key, required this.guideTitle})
-    : super(key: key);
+  const EmergencyGuideDetailPage({super.key, required this.guideTitle});
 
   @override
   Widget build(BuildContext context) {
@@ -1573,17 +1571,15 @@ class EmergencyGuideDetailPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        ...bullets
-            .map(
-              (bullet) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  bullet,
-                  style: const TextStyle(fontSize: 16, height: 1.5),
-                ),
-              ),
-            )
-            .toList(),
+        ...bullets.map(
+          (bullet) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              bullet,
+              style: const TextStyle(fontSize: 16, height: 1.5),
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
       ],
     );

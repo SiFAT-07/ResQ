@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
 import 'services/location_service.dart';
+import 'services/emergency_report_service.dart'; // Added missing import
+import 'MapPage.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class VolunteerDashboard extends StatefulWidget {
   const VolunteerDashboard({super.key});
@@ -17,7 +20,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   bool _isLoading = true;
   Map<String, dynamic>? _dashboardData;
   List<dynamic> _pendingEmergencies = [];
-  Map<String, dynamic> _statusCounts = {};
+  Map<String, int> _statusCounts = {
+    'pending': 0,
+    'responding': 0,
+    'on_scene': 0,
+  };
   int _unreadNotifications = 0;
   bool _isLoadingLocation = true;
   String? _cityName;
@@ -67,22 +74,25 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   // Get current location
   Future<void> _getCurrentLocation() async {
     setState(() => _isLoadingLocation = true);
-    
+
     try {
       final locationService = LocationService();
       await locationService.getCurrentLocation(context);
       final city = await locationService.getCityName(context);
-      
+
       if (city != null) {
         setState(() {
           _cityName = city;
-          
+
           // Update the provider with location data
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          final authProvider = Provider.of<AuthProvider>(
+            context,
+            listen: false,
+          );
           authProvider.setUserLocation(
-            city, 
+            city,
             locationService.currentPosition?.latitude,
-            locationService.currentPosition?.longitude
+            locationService.currentPosition?.longitude,
           );
         });
       } else {
@@ -97,6 +107,39 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       });
     } finally {
       setState(() => _isLoadingLocation = false);
+    }
+  }
+
+  // Fetch emergency data and count status
+  Future<void> _fetchEmergencyData() async {
+    try {
+      final reports = await EmergencyReportService.getEmergencyReports(context);
+
+      // Count statuses
+      int pending = 0;
+      int responding = 0;
+      int onScene = 0;
+
+      for (final report in reports) {
+        final status = report['status'] ?? 'PENDING';
+        if (status == 'PENDING') {
+          pending++;
+        } else if (status == 'RESPONDING') {
+          responding++;
+        } else if (status == 'ON_SCENE') {
+          onScene++;
+        }
+      }
+
+      setState(() {
+        _statusCounts = {
+          'pending': pending,
+          'responding': responding,
+          'on_scene': onScene,
+        };
+      });
+    } catch (e) {
+      debugPrint('Error fetching emergency data: $e');
     }
   }
 
@@ -159,16 +202,20 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               ),
               child: Row(
                 children: [
-                  _isLoadingLocation 
+                  _isLoadingLocation
                       ? SizedBox(
-                          width: 16, 
-                          height: 16, 
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.red[700],
-                          ),
-                        )
-                      : Icon(Icons.location_on, color: Colors.red[700], size: 16),
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.red[700],
+                        ),
+                      )
+                      : Icon(
+                        Icons.location_on,
+                        color: Colors.red[700],
+                        size: 16,
+                      ),
                   const SizedBox(width: 4),
                   Text(
                     displayCity,
@@ -311,12 +358,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   }
 
   Widget _buildVolunteerStats() {
-    // Use data from the API instead of hardcoded values
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.white,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildStatCard(
             'Pending',
@@ -366,25 +411,10 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.campaign, color: Colors.blue[700]),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Urgent need for medical volunteers at Downtown Camp',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
+          TextButton.icon(
+            onPressed: _fetchEmergencyData,
+            icon: Icon(Icons.refresh),
+            label: Text('Refresh'),
           ),
         ],
       ),
@@ -425,8 +455,21 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
   Widget _buildTaskCard(Map<String, dynamic> emergency) {
     final String status = emergency['status'] ?? 'UNKNOWN';
-    final bool isActive = status == 'PENDING' || status == 'RESPONDING';
     final Color statusColor = _getStatusColor(status);
+    final String priority = emergency['priority'] ?? 'MODERATE';
+    final String incidentType =
+        emergency['incident_type'] ?? 'General Incident';
+    final String description =
+        emergency['description'] ?? 'No description provided';
+    final String reporter = emergency['reporter_type'] ?? 'Anonymous';
+    final String reporterName = emergency['reporter_name'] ?? 'Unknown';
+    final String reportTimestamp =
+        emergency['created_at'] ?? emergency['timeAgo'] ?? '';
+
+    final String location = [
+      emergency['address'],
+      '${emergency['latitude']?.toStringAsFixed(6)}, ${emergency['longitude']?.toStringAsFixed(6)}',
+    ].where((e) => e != null).join(' - ');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -455,41 +498,86 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        emergency['id'] ?? 'Emergency ID',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              incidentType,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              priority,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      if (emergency.containsKey('latitude') &&
-                          emergency.containsKey('longitude'))
-                        Text(
-                          'Location: ${emergency['latitude']}, ${emergency['longitude']}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                      if (location.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _openMapWithLocation(
+                              emergency['latitude'] as double?,
+                              emergency['longitude'] as double?,
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  location,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                Icons.map,
+                                size: 16,
+                                color: Colors.blue[600],
+                              ),
+                            ],
                           ),
                         ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            'Reported by: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '$reporter ($reporterName)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    status,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
                   ),
                 ),
               ],
@@ -501,28 +589,23 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  emergency['description'] ?? 'No description available',
+                  description,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (emergency.containsKey('timestamp'))
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 16,
-                        color: Colors.grey[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        emergency['timestamp'] ?? 'Unknown time',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      reportTimestamp,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -530,29 +613,30 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(status).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: _getStatusColor(status),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 TextButton(
                   onPressed: () {
                     _showEmergencyDetailsDialog(emergency);
                   },
                   child: const Text('Details'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed:
-                      isActive
-                          ? () {
-                            // Update to the next status
-                            final nextStatus =
-                                status == 'PENDING' ? 'RESPONDING' : 'ON_SCENE';
-                            _updateEmergencyStatus(emergency['id'], nextStatus);
-                          }
-                          : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    disabledBackgroundColor: Colors.grey[300],
-                  ),
-                  child: Text(_getButtonText(status)),
                 ),
               ],
             ),
@@ -562,87 +646,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
-  // Helper method to get button text based on status
-  String _getButtonText(String status) {
-    switch (status) {
-      case 'PENDING':
-        return 'Respond';
-      case 'RESPONDING':
-        return 'On Scene';
-      case 'ON_SCENE':
-        return 'Resolve';
-      case 'RESOLVED':
-        return 'Resolved';
-      default:
-        return 'Update';
-    }
-  }
-
-  // Helper method to get icon based on status
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case 'PENDING':
-        return Icons.warning_amber;
-      case 'RESPONDING':
-        return Icons.directions_run;
-      case 'ON_SCENE':
-        return Icons.location_on;
-      case 'RESOLVED':
-        return Icons.check_circle;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  // Update emergency status using API
-  Future<void> _updateEmergencyStatus(String emergencyId, String status) async {
-    try {
-      // Show loading indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Updating status...'),
-          duration: Duration(milliseconds: 500),
-        ),
-      );
-
-      // Use API to update emergency status
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final response = await authProvider.updateEmergencyStatus(
-        emergencyId,
-        status,
-      );
-
-      if (response != null) {
-        // Refresh dashboard data after updating status
-        await _loadDashboardData();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Emergency status updated to $status'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        // Show error message from the provider
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to update status: ${authProvider.errorMessage}',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
+  // Show emergency details dialog - without update status button
   void _showEmergencyDetailsDialog(Map<String, dynamic> emergency) {
     showDialog(
       context: context,
@@ -651,11 +655,11 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
             title: Row(
               children: [
                 Icon(
-                  Icons.warning_amber,
-                  color: _getStatusColor(emergency['status']),
+                  _getStatusIcon(emergency['status'] ?? 'PENDING'),
+                  color: _getStatusColor(emergency['status'] ?? 'PENDING'),
                 ),
                 const SizedBox(width: 8),
-                Text('Emergency Details'),
+                Text('${emergency['incident_type'] ?? 'Emergency'} Details'),
               ],
             ),
             content: Column(
@@ -663,23 +667,63 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _detailRow(
-                  'Description',
-                  emergency['description'] ?? 'No description',
+                  'Incident Type',
+                  emergency['incident_type'] ?? 'General Incident',
                 ),
-                _detailRow('Status', emergency['status'] ?? 'Unknown'),
-                if (emergency.containsKey('timestamp'))
-                  _detailRow('Time', emergency['timestamp']),
-                if (emergency.containsKey('latitude') &&
-                    emergency.containsKey('longitude'))
-                  _detailRow(
-                    'Location',
-                    '${emergency['latitude']}, ${emergency['longitude']}',
+                _detailRow(
+                  'Reporter Type',
+                  emergency['reporter_type'] ?? 'Anonymous',
+                ),
+                _detailRow(
+                  'Reporter Name',
+                  emergency['reporter_name'] ?? 'Unknown',
+                ),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openMapWithLocation(
+                      emergency['latitude'] as double?,
+                      emergency['longitude'] as double?,
+                    );
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        child: Text(
+                          'Location:',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          [
+                            emergency['address'],
+                            '${emergency['latitude']?.toStringAsFixed(6)}, ${emergency['longitude']?.toStringAsFixed(6)}',
+                          ].where((e) => e != null).join(' - '),
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 16,
+                        color: Colors.blue[600],
+                      ),
+                    ],
                   ),
-                if (emergency.containsKey('is_emergency'))
-                  _detailRow(
-                    'Emergency',
-                    emergency['is_emergency'] ? 'Yes' : 'No',
-                  ),
+                ),
+                _detailRow('Status', emergency['status'] ?? 'PENDING'),
+                _detailRow('Priority', emergency['priority'] ?? 'MODERATE'),
+                _detailRow(
+                  'Time',
+                  emergency['created_at'] ?? emergency['timeAgo'] ?? '',
+                ),
+                _detailRow(
+                  'Contact',
+                  emergency['contact_info'] ?? 'No contact info',
+                ),
+                _detailRow('Description', emergency['description'] ?? ''),
               ],
             ),
             actions: [
@@ -688,21 +732,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   Navigator.of(context).pop();
                 },
                 child: const Text('Close'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _updateEmergencyStatus(
-                    emergency['id'],
-                    emergency['status'] == 'PENDING'
-                        ? 'RESPONDING'
-                        : 'ON_SCENE',
-                  );
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: Text(
-                  emergency['status'] == 'PENDING' ? 'Respond' : 'On Scene',
-                ),
               ),
             ],
           ),
@@ -728,6 +757,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
+  // Helper method to get status color
   Color _getStatusColor(String? status) {
     switch (status) {
       case 'PENDING':
@@ -740,6 +770,22 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         return Colors.grey;
       default:
         return Colors.grey;
+    }
+  }
+
+  // Add the missing _getStatusIcon method
+  IconData _getStatusIcon(String? status) {
+    switch (status) {
+      case 'PENDING':
+        return Icons.hourglass_empty;
+      case 'RESPONDING':
+        return Icons.directions_run;
+      case 'ON_SCENE':
+        return Icons.location_on;
+      case 'RESOLVED':
+        return Icons.check_circle;
+      default:
+        return Icons.help_outline;
     }
   }
 
@@ -846,6 +892,25 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LandingPage()),
       (route) => false,
+    );
+  }
+
+  // Add a new method to open MapPage with specific location
+  void _openMapWithLocation(double? latitude, double? longitude) {
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location coordinates not available'),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapPage(initialLocation: LatLng(latitude, longitude)),
+      ),
     );
   }
 }

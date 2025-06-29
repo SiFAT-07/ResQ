@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
-
+import 'package:geolocator/geolocator.dart';
+import 'services/emergency_report_service.dart';
 
 class ReportIncidentPage extends StatefulWidget {
   const ReportIncidentPage({super.key});
@@ -20,6 +20,14 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
   String? fireAmount;
   String? peopleCount;
   int _currentStep = 0;
+  bool _isSubmitting = false;
+  Position? _currentPosition;
+
+  // Form controllers
+  final TextEditingController _contactNameController = TextEditingController();
+  final TextEditingController _contactPhoneController = TextEditingController();
+  final TextEditingController _incidentDetailsController =
+      TextEditingController();
 
   final List<String> incidentTypes = [
     'Fire Incident',
@@ -29,6 +37,47 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
     'Pet Rescue',
     'Others',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
+
+  @override
+  void dispose() {
+    _contactNameController.dispose();
+    _contactPhoneController.dispose();
+    _incidentDetailsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _currentPosition = position;
+      });
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -263,21 +312,45 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'Sadiar barir pasher bari',
-                    style: TextStyle(color: Colors.grey[800]),
-                  ),
+                  child:
+                      _currentPosition != null
+                          ? Text(
+                            'Lat: ${_currentPosition!.latitude}, Lon: ${_currentPosition!.longitude}',
+                            style: TextStyle(color: Colors.grey[800]),
+                          )
+                          : Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: primaryRed,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Fetching location...',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
                 ),
-                Icon(Icons.my_location, color: primaryRed),
+                Icon(
+                  _currentPosition != null
+                      ? Icons.my_location
+                      : Icons.location_searching,
+                  color: primaryRed,
+                ),
               ],
             ),
           ),
           const SizedBox(height: 12),
           TextButton.icon(
-            onPressed: () {},
-            icon: Icon(Icons.edit_location_alt, color: primaryRed, size: 18),
+            onPressed: _getCurrentLocation,
+            icon: Icon(Icons.refresh, color: primaryRed, size: 18),
             label: Text(
-              'Change Location',
+              'Refresh Location',
               style: TextStyle(color: primaryRed, fontSize: 14),
             ),
             style: TextButton.styleFrom(
@@ -322,60 +395,48 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
 
   Widget _buildIncidentTypeCard(String type) {
     final bool isSelected = selectedIncidentType == type;
-    IconData icon;
-
-    switch (type) {
-      case 'Fire Incident':
-        icon = Icons.local_fire_department;
-        break;
-      case 'Flood Incident':
-        icon = Icons.water_damage;
-        break;
-      case 'Gas Leak':
-        icon = Icons.gas_meter;
-        break;
-      case 'Building Collapse':
-        icon = Icons.domain_disabled;
-        break;
-      case 'Pet Rescue':
-        icon = Icons.pets;
-        break;
-      default:
-        icon = Icons.warning_amber;
-    }
 
     return GestureDetector(
       onTap: () {
         setState(() {
           selectedIncidentType = type;
-          _currentStep = 1; // Move to the next step
+          _currentStep = 1; // Move to next step on selection
         });
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? primaryRed.withOpacity(0.1) : lightGrey,
+          color: isSelected ? primaryRed.withOpacity(0.1) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border:
+          border: Border.all(
+            color: isSelected ? primaryRed : Colors.grey.shade300,
+          ),
+          boxShadow:
               isSelected
-                  ? Border.all(color: primaryRed, width: 2)
-                  : Border.all(color: Colors.transparent),
+                  ? [
+                    BoxShadow(
+                      color: primaryRed.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                  : null,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon,
-              color: isSelected ? primaryRed : Colors.grey[700],
+              _getIconForIncidentType(type),
+              color: isSelected ? primaryRed : Colors.grey.shade600,
               size: 32,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               type,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: isSelected ? primaryRed : Colors.grey[800],
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 fontSize: 12,
+                color: isSelected ? primaryRed : Colors.grey.shade800,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ],
@@ -384,223 +445,262 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
     );
   }
 
+  IconData _getIconForIncidentType(String type) {
+    switch (type) {
+      case 'Fire Incident':
+        return Icons.local_fire_department;
+      case 'Flood Incident':
+        return Icons.water_damage;
+      case 'Gas Leak':
+        return Icons.warning_amber;
+      case 'Building Collapse':
+        return Icons.domain_disabled;
+      case 'Pet Rescue':
+        return Icons.pets;
+      default:
+        return Icons.report_problem;
+    }
+  }
+
+  // Add these methods to build specific incident detail forms
+
   Widget _buildFireIncidentFields() {
-    return _buildDetailFields([
-      _buildDropdownField(
-        'Which floor?',
-        ['1-5', '6-10', '>10'],
-        selectedFloor,
-        (value) {
-          setState(() => selectedFloor = value);
-        },
-        Icons.apartment,
-      ),
-      _buildDropdownField(
-        'How severe is the fire?',
-        ['Small/Contained', 'Medium/Spreading', 'Large/Out of Control'],
-        fireAmount,
-        (value) {
-          setState(() => fireAmount = value);
-        },
-        Icons.local_fire_department,
-      ),
-      _buildDropdownField(
-        'People affected?',
-        ['None', '1-3', '4-10', 'More than 10'],
-        peopleCount,
-        (value) {
-          setState(() => peopleCount = value);
-          _currentStep = 2; // Move to the next step
-        },
-        Icons.group,
-      ),
-    ]);
-  }
-
-  Widget _buildFloodIncidentFields() {
-    return _buildDetailFields([
-      _buildDropdownField(
-        'Water Level',
-        ['Ankle-deep', 'Knee-deep', 'Waist-deep or higher'],
-        fireAmount,
-        (value) {
-          setState(() => fireAmount = value);
-        },
-        Icons.water,
-      ),
-      _buildDropdownField(
-        'People stranded?',
-        ['None', '1-3', '4-10', 'More than 10'],
-        peopleCount,
-        (value) {
-          setState(() => peopleCount = value);
-          _currentStep = 2; // Move to the next step
-        },
-        Icons.group,
-      ),
-    ]);
-  }
-
-  Widget _buildGasLeakFields() {
-    return _buildDetailFields([
-      _buildDropdownField(
-        'Leak Source',
-        ['Kitchen Appliance', 'Pipe Line', 'Cylinder/Tank', 'Unknown'],
-        fireAmount,
-        (value) {
-          setState(() => fireAmount = value);
-        },
-        Icons.propane_tank,
-      ),
-      _buildDropdownField(
-        'People at risk?',
-        ['None', '1-3', '4-10', 'More than 10'],
-        peopleCount,
-        (value) {
-          setState(() => peopleCount = value);
-          _currentStep = 2; // Move to the next step
-        },
-        Icons.group,
-      ),
-    ]);
-  }
-
-  Widget _buildBuildingCollapseFields() {
-    return _buildDetailFields([
-      _buildDropdownField(
-        'Collapse Severity',
-        ['Partial (Some structure intact)', 'Complete (Full collapse)'],
-        fireAmount,
-        (value) {
-          setState(() => fireAmount = value);
-        },
-        Icons.domain_disabled,
-      ),
-      _buildDropdownField(
-        'People trapped?',
-        ['None', '1-3', '4-10', 'More than 10', 'Unknown'],
-        peopleCount,
-        (value) {
-          setState(() => peopleCount = value);
-          _currentStep = 2; // Move to the next step
-        },
-        Icons.group,
-      ),
-    ]);
-  }
-
-  Widget _buildPetRescueFields() {
-    return _buildDetailFields([
-      _buildDropdownField(
-        'Animal Type',
-        ['Cat', 'Dog', 'Bird', 'Livestock', 'Wildlife', 'Other'],
-        fireAmount,
-        (value) {
-          setState(() => fireAmount = value);
-          _currentStep = 2; // Move to the next step
-        },
-        Icons.pets,
-      ),
-    ]);
-  }
-
-  Widget _buildDetailFields(List<Widget> fields) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Additional Details',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              color: darkBlue,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...fields
-              .expand((field) => [field, const SizedBox(height: 16)])
-              .toList()
-            ..removeLast(),
-          if (fields.isNotEmpty) const SizedBox(height: 8),
-          Text(
-            'These details help us dispatch the right emergency response team',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdownField(
-    String label,
-    List<String> options,
-    String? selectedValue,
-    ValueChanged<String> onChanged,
-    IconData icon,
-  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(icon, color: primaryRed, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey[800],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        Text(
+          'Fire Incident Details',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildDetailField('Fire Size', [
+          'Small (contained to single object)',
+          'Medium (single room)',
+          'Large (multiple rooms)',
+          'Severe (whole building)',
+        ]),
+        const SizedBox(height: 16),
+        _buildDetailField('People Involved', [
+          'No one',
+          '1-5 people',
+          '5-20 people',
+          '20+ people',
+        ]),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _incidentDetailsController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Additional Details',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFloodIncidentFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Flood Details',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildDetailField('Water Level', [
+          'Ankle deep',
+          'Knee deep',
+          'Waist deep',
+          'Above waist',
+        ]),
+        const SizedBox(height: 16),
+        _buildDetailField('Area Affected', [
+          'Street only',
+          'Few buildings',
+          'Entire block',
+          'Multiple blocks',
+        ]),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _incidentDetailsController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Additional Details',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGasLeakFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gas Leak Details',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildDetailField('Smell Intensity', [
+          'Faint',
+          'Moderate',
+          'Strong',
+          'Overwhelming',
+        ]),
+        const SizedBox(height: 16),
+        _buildDetailField('Area Affected', [
+          'Single room',
+          'Single building',
+          'Multiple buildings',
+          'Entire block',
+        ]),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _incidentDetailsController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Additional Details',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuildingCollapseFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Building Collapse Details',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildDetailField('Collapse Severity', [
+          'Partial',
+          'Half collapsed',
+          'Mostly collapsed',
+          'Complete collapse',
+        ]),
+        const SizedBox(height: 16),
+        _buildDetailField('People Trapped', [
+          'None',
+          'Few people',
+          'Many people',
+          'Unknown',
+        ]),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _incidentDetailsController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Additional Details',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPetRescueFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Pet Rescue Details',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildDetailField('Animal Type', ['Dog', 'Cat', 'Bird', 'Other']),
+        const SizedBox(height: 16),
+        _buildDetailField('Situation', [
+          'Trapped',
+          'Injured',
+          'Aggressive',
+          'Abandoned',
+        ]),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _incidentDetailsController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Additional Details',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailField(String label, List<String> options) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            color: darkBlue,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: lightGrey,
+            border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              hint: Text(
-                "Select an option",
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              ),
-              value: selectedValue,
-              isExpanded: true,
-              icon: Icon(Icons.keyboard_arrow_down, color: darkBlue),
-              dropdownColor: Colors.white,
-              onChanged: (value) => onChanged(value!),
-              items:
-                  options.map((option) {
-                    return DropdownMenuItem<String>(
-                      value: option,
-                      child: Text(
-                        option,
-                        style: TextStyle(color: Colors.grey[800]),
-                      ),
-                    );
-                  }).toList(),
-            ),
+          child: Column(
+            children:
+                options.map((option) {
+                  return RadioListTile<String>(
+                    title: Text(option),
+                    value: option,
+                    groupValue:
+                        label == 'Fire Size' ||
+                                label == 'Smell Intensity' ||
+                                label == 'Collapse Severity' ||
+                                label == 'Water Level'
+                            ? fireAmount
+                            : peopleCount,
+                    onChanged: (value) {
+                      setState(() {
+                        if (label == 'Fire Size' ||
+                            label == 'Smell Intensity' ||
+                            label == 'Collapse Severity' ||
+                            label == 'Water Level') {
+                          fireAmount = value;
+                        } else {
+                          peopleCount = value;
+                        }
+                      });
+                    },
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                    dense: true,
+                  );
+                }).toList(),
           ),
         ),
       ],
@@ -608,184 +708,367 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
   }
 
   Widget _buildAttachmentField() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Add Photos/Videos',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Attach Photos or Videos',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              color: darkBlue,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: lightGrey,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.file_upload_outlined,
-                  color: Colors.grey[600],
-                  size: 38,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  // Image picker functionality would be implemented here
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Image upload not implemented in this demo',
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_a_photo, color: Colors.grey.shade600),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add Photo',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'Tap to upload',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Photos help emergency services assess the situation',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  // Video picker functionality would be implemented here
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Video upload not implemented in this demo',
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.videocam, color: Colors.grey.shade600),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Add Video',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildContactField() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Your Contact Information',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: darkBlue,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Your Contact Information',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              color: darkBlue,
-            ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _contactNameController,
+          decoration: InputDecoration(
+            labelText: 'Your Name',
+            prefixIcon: Icon(Icons.person),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              hintText: 'Phone Number (Optional)',
-              prefixIcon: Icon(Icons.phone, color: primaryRed),
-            ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _contactPhoneController,
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(
+            labelText: 'Phone Number',
+            prefixIcon: Icon(Icons.phone),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'We may need to call you for additional information',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildSubmitButton() {
-    return ElevatedButton(
-      onPressed: () {
-        // Show confirmation dialog
-        showDialog(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                contentPadding: const EdgeInsets.all(24),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitReport,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryRed,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child:
+            _isSubmitting
+                ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: primaryRed.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.check_circle,
-                        color: primaryRed,
-                        size: 48,
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      "Report Submitted",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: darkBlue,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Your incident report has been successfully submitted. Emergency services have been notified and help is on the way.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text("OK"),
-                          ),
-                        ),
-                      ],
-                    ),
+                    SizedBox(width: 12),
+                    Text('Submitting...'),
                   ],
+                )
+                : Text('Submit Report'),
+      ),
+    );
+  }
+
+  Future<void> _submitReport() async {
+    if (_currentPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot get your location. Please try again.')),
+      );
+      return;
+    }
+
+    if (selectedIncidentType == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Please select an incident type')));
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _currentStep = 2; // Move to final step
+    });
+
+    // Prepare report details with updated structure
+    final Map<String, dynamic> details = {
+      'description': _incidentDetailsController.text,
+      'severity': fireAmount, // This will be mapped to the severity field
+      'people_involved':
+          peopleCount, // This will be mapped to the people_count field
+      'reporter_type': 'SPECTATOR', // Explicitly set the reporter type
+      'answers': {
+        // Store detailed answers separately for description generation
+        'Fire Size/Severity': fireAmount,
+        'People Involved': peopleCount,
+        'Additional Details': _incidentDetailsController.text,
+      },
+      'contact_info':
+          'Name: ${_contactNameController.text}, Phone: ${_contactPhoneController.text}',
+    };
+
+    try {
+      final success = await EmergencyReportService.submitIncidentReport(
+        context: context,
+        incidentType: selectedIncidentType!,
+        details: details,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        contactInfo:
+            'Name: ${_contactNameController.text}, Phone: ${_contactPhoneController.text}',
+      );
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      if (success) {
+        _showSuccessDialog();
+      } else {
+        _showErrorDialog();
+      }
+    } catch (e) {
+      setState(() {
+        _isSubmitting = false;
+      });
+      _showErrorDialog();
+    }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Report Submitted!',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: darkBlue,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your incident report has been sent to emergency services. They will respond as soon as possible.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: darkBlue.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: primaryRed.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Incident Type: $selectedIncidentType',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: darkBlue,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Location: $_currentPosition',
+                        style: TextStyle(
+                          color: darkBlue.withOpacity(0.7),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Status: PENDING',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Reset form
+                setState(() {
+                  selectedIncidentType = null;
+                  selectedFloor = null;
+                  fireAmount = null;
+                  peopleCount = null;
+                  _currentStep = 0;
+                  _incidentDetailsController.clear();
+                  _contactNameController.clear();
+                  _contactPhoneController.clear();
+                });
+              },
+              child: Text(
+                'New Report',
+                style: TextStyle(
+                  color: primaryRed,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryRed,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Done'),
+            ),
+          ],
         );
       },
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.send),
-          SizedBox(width: 8),
-          Text(
-            'SUBMIT REPORT',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    );
+  }
+
+  void _showErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Error'),
+          content: Text(
+            'Failed to submit your report. Please try again later.',
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -793,124 +1076,119 @@ class _ReportIncidentPageState extends State<ReportIncidentPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: primaryRed.withOpacity(0.05),
+        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryRed.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'Emergency Numbers',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: darkBlue,
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
-              Icon(Icons.phone_in_talk, color: primaryRed, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Emergency Numbers',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: darkBlue,
-                ),
+              _buildEmergencyNumberCard('Police', '999', Icons.local_police),
+              const SizedBox(width: 12),
+              _buildEmergencyNumberCard(
+                'Fire',
+                '000',
+                Icons.local_fire_department,
+              ),
+              const SizedBox(width: 12),
+              _buildEmergencyNumberCard(
+                'Ambulance',
+                '888',
+                Icons.medical_services,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildEmergencyNumberItem('Fire Department', '911'),
-          _buildEmergencyNumberItem('Police', '911'),
-          _buildEmergencyNumberItem('Ambulance', '911'),
-          _buildEmergencyNumberItem('FireLit ResQ Hotline', '555-123-4567'),
         ],
       ),
     );
   }
 
-  Widget _buildEmergencyNumberItem(String service, String number) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            service,
-            style: TextStyle(fontSize: 14, color: Colors.grey[800]),
-          ),
-          GestureDetector(
-            onTap: () {},
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: primaryRed),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    number,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: primaryRed,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.call, color: primaryRed, size: 16),
-                ],
+  Widget _buildEmergencyNumberCard(String title, String number, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: primaryRed),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+            ),
+            Text(
+              number,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: primaryRed,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildCopyright() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Text(
-          "© 2025 FireLit ResQ. All rights reserved.",
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
+    return Text(
+      '© 2024 ResQ Emergency Services',
+      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      textAlign: TextAlign.center,
     );
   }
 
   Widget _buildBottomNavigationBar() {
-    return NavigationBar(
-      selectedIndex: 1,
-      onDestinationSelected: (index) {},
-      backgroundColor: Colors.white,
-      elevation: 8,
-      shadowColor: Colors.black.withOpacity(0.1),
-      destinations: [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined, color: Colors.grey[600]),
-          selectedIcon: Icon(Icons.home, color: primaryRed),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.warning_amber_outlined, color: Colors.grey[600]),
-          selectedIcon: Icon(Icons.warning_amber, color: primaryRed),
+    return BottomNavigationBar(
+      currentIndex: 1,
+      selectedItemColor: primaryRed,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.report_problem),
           label: 'Report',
         ),
-        NavigationDestination(
-          icon: Icon(Icons.chat_bubble_outline, color: Colors.grey[600]),
-          selectedIcon: Icon(Icons.chat_bubble, color: primaryRed),
-          label: 'Chatbot',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline, color: Colors.grey[600]),
-          selectedIcon: Icon(Icons.person, color: primaryRed),
-          label: 'Profile',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
-      labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
     );
   }
+}
+
+Widget _buildCopyright() {
+  return Text(
+    '© 2024 ResQ Emergency Services',
+    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+    textAlign: TextAlign.center,
+  );
+}
+
+Widget _buildBottomNavigationBar() {
+  return BottomNavigationBar(
+    currentIndex: 1,
+    items: const [
+      BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.report_problem),
+        label: 'Report',
+      ),
+      BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
+      BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+    ],
+  );
 }

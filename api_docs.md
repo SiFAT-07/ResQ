@@ -407,7 +407,7 @@ Authorization: Firebase {firebase_id_token}
 
 **Endpoint**: `POST /emergency/reports/report_emergency/`
 
-**Description**: Report a new emergency with location
+**Description**: Report a new emergency with coordinates
 
 **Authentication**: Required
 
@@ -417,15 +417,13 @@ Authorization: Firebase {firebase_id_token}
 {
   "reporter_type": "VICTIM",
   "description": "Building collapsed, need urgent help",
-  "location": {
-    "latitude": 38.4192,
-    "longitude": 27.1287,
-    "address": "123 Main St, Izmir, Turkey"
-  },
+  "latitude": 38.4192,
+  "longitude": 27.1287,
   "tags": [
     "3fa85f64-5717-4562-b3fc-2c963f66afab",
     "5fa85f64-5717-4562-b3fc-2c963f66afad"
-  ]
+  ],
+  "media_file": "[binary file - optional]"
 }
 ```
 
@@ -437,7 +435,6 @@ Authorization: Firebase {firebase_id_token}
   "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "reporter_type": "VICTIM",
   "description": "Building collapsed, need urgent help",
-  "location": "5fa85f64-5717-4562-b3fc-2c963f66afaa",
   "latitude": 38.4192,
   "longitude": 27.1287,
   "status": "PENDING",
@@ -458,87 +455,192 @@ Authorization: Firebase {firebase_id_token}
 }
 ```
 
-### List Emergencies
+### Create Standard Report
 
-**Endpoint**: `GET /emergency/reports/`
+**Endpoint**: `POST /emergency/reports/`
 
-**Description**: Get a list of emergency reports
-
-**Authentication**: Required
-
-**Query Parameters**:
-
-- `status`: Filter by status (PENDING, RESPONDING, ON_SCENE, RESOLVED)
-- `is_emergency`: Filter by emergency flag (true/false)
-- `reporter_type`: Filter by reporter type (VICTIM, SPECTATOR)
-
-**Response (200 OK)**:
-
-```json
-[
-  {
-    "id": "6fa85f64-5717-4562-b3fc-2c963f66afae",
-    "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "reporter_type": "VICTIM",
-    "description": "Building collapsed, need urgent help",
-    "latitude": 38.4192,
-    "longitude": 27.1287,
-    "status": "PENDING",
-    "is_emergency": true,
-    "tags": [
-      {
-        "id": "3fa85f64-5717-4562-b3fc-2c963f66afab",
-        "name": "Building Collapse",
-        "emergency_type": "EARTHQUAKE"
-      },
-      {
-        "id": "5fa85f64-5717-4562-b3fc-2c963f66afad",
-        "name": "Trapped Individuals",
-        "emergency_type": "DISASTER"
-      }
-    ],
-    "timestamp": "2025-04-15T10:30:33Z"
-  }
-]
-```
-
-### Get Emergency Details
-
-**Endpoint**: `GET /emergency/reports/{id}/`
-
-**Description**: Get details of a specific emergency
+**Description**: Create a standard emergency report
 
 **Authentication**: Required
 
-**Response (200 OK)**:
+**Request Body**:
 
 ```json
 {
-  "id": "6fa85f64-5717-4562-b3fc-2c963f66afae",
-  "reporter": {
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "username": "john_doe",
-    "phone_number": "+905551234567"
-  },
-  "reporter_type": "VICTIM",
-  "description": "Building collapsed, need urgent help",
-  "latitude": 38.4192,
-  "longitude": 27.1287,
+  "reporter_type": "SPECTATOR",
+  "description": "Traffic accident on main highway",
+  "latitude": 38.418,
+  "longitude": 27.129,
+  "is_emergency": true,
+  "tag_ids": ["4fa85f64-5717-4562-b3fc-2c963f66afac"]
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "id": "7fa85f64-5717-4562-b3fc-2c963f66afaf",
+  "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "reporter_type": "SPECTATOR",
+  "description": "Traffic accident on main highway",
+  "latitude": 38.418,
+  "longitude": 27.129,
   "status": "PENDING",
   "is_emergency": true,
   "tags": [
     {
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afab",
-      "name": "Building Collapse",
-      "emergency_type": "EARTHQUAKE"
-    },
-    {
-      "id": "5fa85f64-5717-4562-b3fc-2c963f66afad",
-      "name": "Trapped Individuals",
-      "emergency_type": "DISASTER"
+      "id": "4fa85f64-5717-4562-b3fc-2c963f66afac",
+      "name": "Traffic Accident",
+      "emergency_type": "TRAFFIC"
     }
   ],
-  "timestamp": "2025-04-15T10:30:33Z"
+  "timestamp": "2025-04-15T11:30:33Z"
+}
+```
+
+### Non-Emergency Report
+
+**Endpoint**: `POST /emergency/reports/`
+
+**Description**: Create a non-emergency report (such as infrastructure issues)
+
+**Authentication**: Required
+
+**Request Body**:
+
+```json
+{
+  "reporter_type": "SPECTATOR",
+  "description": "Damaged street light on 5th Avenue",
+  "latitude": 38.4175,
+  "longitude": 27.1295,
+  "is_emergency": false,
+  "tag_ids": []
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "id": "8fa85f64-5717-4562-b3fc-2c963f66afb0",
+  "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "reporter_type": "SPECTATOR",
+  "description": "Damaged street light on 5th Avenue",
+  "latitude": 38.4175,
+  "longitude": 27.1295,
+  "status": "PENDING",
+  "is_emergency": false,
+  "tags": [],
+  "timestamp": "2025-04-15T12:30:33Z"
+}
+```
+
+### Anonymous Report
+
+**Endpoint**: `POST /emergency/reports/`
+
+**Description**: Create an anonymous report (reporter details are masked in response)
+
+**Authentication**: Required (but reporter identity is protected)
+
+**Request Body**:
+
+```json
+{
+  "reporter_type": "SPECTATOR",
+  "description": "Suspicious activity in abandoned building",
+  "latitude": 38.4165,
+  "longitude": 27.1305,
+  "is_emergency": true,
+  "is_anonymous": true,
+  "tag_ids": ["5fa85f64-5717-4562-b3fc-2c963f66afae"]
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "id": "9fa85f64-5717-4562-b3fc-2c963f66afb1",
+  "reporter": "ANONYMOUS",
+  "reporter_type": "SPECTATOR",
+  "description": "Suspicious activity in abandoned building",
+  "latitude": 38.4165,
+  "longitude": 27.1305,
+  "status": "PENDING",
+  "is_emergency": true,
+  "tags": [
+    {
+      "id": "5fa85f64-5717-4562-b3fc-2c963f66afae",
+      "name": "Suspicious Activity",
+      "emergency_type": "OTHER"
+    }
+  ],
+  "timestamp": "2025-04-15T13:30:33Z"
+}
+```
+
+### Multiple Location Reports
+
+**Endpoint**: `POST /emergency/reports/multi_location/`
+
+**Description**: Report an emergency affecting multiple locations (e.g., wildfire)
+
+**Authentication**: Required
+
+**Request Body**:
+
+```json
+{
+  "reporter_type": "SPECTATOR",
+  "description": "Wildfire spreading across multiple areas",
+  "locations": [
+    {
+      "latitude": 38.415,
+      "longitude": 27.127
+    },
+    {
+      "latitude": 38.414,
+      "longitude": 27.128
+    }
+  ],
+  "tag_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa5"],
+  "is_emergency": true
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "main_report": {
+    "id": "10fa85f64-5717-4562-b3fc-2c963f66afb2",
+    "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "reporter_type": "SPECTATOR",
+    "description": "Wildfire spreading across multiple areas",
+    "latitude": 38.415,
+    "longitude": 27.127,
+    "status": "PENDING",
+    "is_emergency": true,
+    "tags": [
+      {
+        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa5",
+        "name": "Wildfire",
+        "emergency_type": "FIRE"
+      }
+    ],
+    "timestamp": "2025-04-15T14:30:33Z"
+  },
+  "additional_reports": [
+    {
+      "id": "11fa85f64-5717-4562-b3fc-2c963f66afb3",
+      "latitude": 38.414,
+      "longitude": 27.128
+    }
+  ],
+  "total_locations": 2
 }
 ```
 
@@ -636,6 +738,202 @@ Authorization: Firebase {firebase_id_token}
     "distance": 0.35
   }
 ]
+```
+
+## Chatbot & AI Assistance
+
+ResQ includes an intelligent AI chatbot powered by Google's Gemini AI that provides emergency guidance and support. The chatbot maintains conversation history and provides contextual responses based on user roles and emergency scenarios.
+
+### Send Message to Chatbot
+
+**Endpoint**: `POST /chatbot/chat/`
+
+**Description**: Send a message to the AI chatbot and receive emergency guidance
+
+**Authentication**: Required
+
+**Request Body**:
+
+```json
+{
+  "message": "What should I do if there's a fire in my building?"
+}
+```
+
+**Response (200 OK)**:
+
+```json
+{
+  "id": "12fa85f64-5717-4562-b3fc-2c963f66afb4",
+  "message": "What should I do if there's a fire in my building?",
+  "response": "🔥 **FIRE EMERGENCY PROTOCOL:**\n\n1. **IMMEDIATE ACTION**: Call emergency services (911) immediately\n2. **EVACUATE SAFELY**: Leave the building via the nearest safe exit\n3. **STAY LOW**: Crawl under smoke to avoid inhalation\n4. **DON'T USE ELEVATORS**: Always use stairs during fire emergencies\n5. **MEETING POINT**: Go to your designated assembly area\n6. **DON'T RE-ENTER**: Never go back inside for belongings\n\nIs this an active emergency? If so, please call emergency services immediately and use our emergency reporting feature.",
+  "timestamp": "2025-04-15T12:00:33Z",
+  "user_role": "CITIZEN"
+}
+```
+
+### Send Message via ViewSet
+
+**Endpoint**: `POST /chatbot/sessions/send_message/`
+
+**Description**: Send a message using the ChatViewSet for more detailed session management
+
+**Authentication**: Required
+
+**Request Body**:
+
+```json
+{
+  "message": "How do I perform CPR?"
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "id": "13fa85f64-5717-4562-b3fc-2c963f66afb5",
+  "message": "How do I perform CPR?",
+  "response": "🚑 **CPR (Cardiopulmonary Resuscitation) Steps:**\n\n**FIRST: Call emergency services (911) immediately**\n\n**For Adults:**\n1. **Check Responsiveness**: Tap shoulders, shout \"Are you okay?\"\n2. **Position**: Place on firm, flat surface\n3. **Hand Placement**: Heel of hand on center of chest, between nipples\n4. **Compressions**: Push hard and fast, at least 2 inches deep\n5. **Rate**: 100-120 compressions per minute\n6. **Count**: 30 compressions, then 2 rescue breaths\n7. **Continue**: Until emergency services arrive\n\n**Important**: Only perform if trained. If untrained, focus on continuous chest compressions.\n\nIs this an emergency situation happening now?",
+  "timestamp": "2025-04-15T12:05:33Z"
+}
+```
+
+### Get Chat Session History
+
+**Endpoint**: `GET /chatbot/sessions/session_history/?limit=10`
+
+**Description**: Retrieve chat history for the current user
+
+**Authentication**: Required
+
+**Query Parameters**:
+
+- `limit`: Number of recent sessions to retrieve (default: 20)
+
+**Response (200 OK)**:
+
+```json
+[
+  {
+    "id": "13fa85f64-5717-4562-b3fc-2c963f66afb5",
+    "user": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "user_username": "john_doe",
+    "message": "How do I perform CPR?",
+    "response": "🚑 **CPR (Cardiopulmonary Resuscitation) Steps:**\n\n**FIRST: Call emergency services (911) immediately**...",
+    "timestamp": "2025-04-15T12:05:33Z"
+  },
+  {
+    "id": "12fa85f64-5717-4562-b3fc-2c963f66afb4",
+    "user": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "user_username": "john_doe",
+    "message": "What should I do if there's a fire in my building?",
+    "response": "🔥 **FIRE EMERGENCY PROTOCOL:**\n\n1. **IMMEDIATE ACTION**: Call emergency services (911) immediately...",
+    "timestamp": "2025-04-15T12:00:33Z"
+  }
+]
+```
+
+### Get Quick Emergency Responses
+
+**Endpoint**: `GET /chatbot/sessions/quick_responses/`
+
+**Description**: Get predefined quick responses for common emergency scenarios
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+{
+  "fire": "🔥 FIRE EMERGENCY:\n1. Call emergency services immediately\n2. Evacuate the building safely\n3. Stay low to avoid smoke\n4. Don't use elevators\n5. Meet at designated assembly point",
+  "medical": "🚑 MEDICAL EMERGENCY:\n1. Call emergency services (911)\n2. Check for responsiveness\n3. Check breathing and pulse\n4. Apply first aid if trained\n5. Stay with the person until help arrives",
+  "police": "🚓 POLICE EMERGENCY:\n1. Call emergency services immediately\n2. Stay in a safe location\n3. Provide clear location details\n4. Follow dispatcher instructions\n5. Stay on the line until help arrives",
+  "natural_disaster": "🌪️ NATURAL DISASTER:\n1. Follow local emergency broadcasts\n2. Take shelter immediately\n3. Stay away from windows\n4. Have emergency supplies ready\n5. Follow evacuation orders if given"
+}
+```
+
+### Clear Chat History
+
+**Endpoint**: `DELETE /chatbot/sessions/clear_history/`
+
+**Description**: Clear all chat history for the current user
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+{
+  "message": "Cleared 15 chat sessions"
+}
+```
+
+### Get Chat Statistics
+
+**Endpoint**: `GET /chatbot/stats/`
+
+**Description**: Get chat usage statistics for the current user
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+{
+  "total_sessions": 47,
+  "recent_sessions": 8,
+  "user_role": "CITIZEN"
+}
+```
+
+### List All Chat Sessions
+
+**Endpoint**: `GET /chatbot/sessions/`
+
+**Description**: Get a paginated list of all chat sessions for the current user
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+{
+  "count": 47,
+  "next": "http://localhost:8000/api/chatbot/sessions/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": "13fa85f64-5717-4562-b3fc-2c963f66afb5",
+      "user": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "user_username": "john_doe",
+      "message": "How do I perform CPR?",
+      "response": "🚑 **CPR (Cardiopulmonary Resuscitation) Steps:**...",
+      "timestamp": "2025-04-15T12:05:33Z"
+    }
+  ]
+}
+```
+
+### Get Specific Chat Session
+
+**Endpoint**: `GET /chatbot/sessions/{id}/`
+
+**Description**: Retrieve details of a specific chat session
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+{
+  "id": "13fa85f64-5717-4562-b3fc-2c963f66afb5",
+  "user": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "user_username": "john_doe",
+  "message": "How do I perform CPR?",
+  "response": "🚑 **CPR (Cardiopulmonary Resuscitation) Steps:**\n\n**FIRST: Call emergency services (911) immediately**\n\n**For Adults:**\n1. **Check Responsiveness**: Tap shoulders, shout \"Are you okay?\"\n2. **Position**: Place on firm, flat surface\n3. **Hand Placement**: Heel of hand on center of chest, between nipples\n4. **Compressions**: Push hard and fast, at least 2 inches deep\n5. **Rate**: 100-120 compressions per minute\n6. **Count**: 30 compressions, then 2 rescue breaths\n7. **Continue**: Until emergency services arrive\n\n**Important**: Only perform if trained. If untrained, focus on continuous chest compressions.\n\nIs this an emergency situation happening now?",
+  "timestamp": "2025-04-15T12:05:33Z"
+}
 ```
 
 ## Notifications
@@ -859,7 +1157,11 @@ Authorization: Firebase {firebase_id_token}
   ],
   "ongoing_emergencies": 1,
   "total_reports": 3,
-  "resolved_reports": 2
+  "resolved_reports": 2,
+  "chat_sessions": {
+    "total": 47,
+    "recent": 8
+  }
 }
 ```
 
@@ -904,21 +1206,173 @@ Authorization: Firebase {firebase_id_token}
 }
 ```
 
+## Error Handling
+
+### Standard Error Responses
+
+All endpoints return standardized error responses:
+
+**400 Bad Request**:
+
+```json
+{
+  "error": "Invalid request data",
+  "details": {
+    "message": ["This field is required."]
+  }
+}
+```
+
+**401 Unauthorized**:
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+**403 Forbidden**:
+
+```json
+{
+  "detail": "You do not have permission to perform this action."
+}
+```
+
+**404 Not Found**:
+
+```json
+{
+  "detail": "Not found."
+}
+```
+
+**500 Internal Server Error**:
+
+```json
+{
+  "error": "Internal server error",
+  "message": "An unexpected error occurred"
+}
+```
+
+### Chatbot-Specific Errors
+
+**AI Service Unavailable**:
+
+```json
+{
+  "error": "Failed to process message",
+  "details": "I'm sorry, I'm having trouble processing your request right now. For immediate emergencies, please call your local emergency services."
+}
+```
+
+**Empty Message**:
+
+```json
+{
+  "error": "Message cannot be empty"
+}
+```
+
+## Rate Limiting
+
+- **Chatbot endpoints**: 60 requests per minute per user
+- **Emergency reporting**: 10 requests per minute per user
+- **Authentication endpoints**: 20 requests per minute per IP
+- **General API**: 100 requests per minute per authenticated user
+
+## Webhooks
+
+### Emergency Status Updates
+
+ResQ can send webhook notifications when emergency statuses change:
+
+**Webhook URL**: Configure in admin panel
+
+**Payload Example**:
+
+```json
+{
+  "event": "emergency_status_changed",
+  "emergency_id": "6fa85f64-5717-4562-b3fc-2c963f66afae",
+  "old_status": "PENDING",
+  "new_status": "RESPONDING",
+  "timestamp": "2025-04-15T10:45:33Z",
+  "location": {
+    "latitude": 38.4192,
+    "longitude": 27.1287
+  }
+}
+```
+
+## SDK and Integration
+
+### JavaScript SDK
+
+```javascript
+// Initialize ResQ client
+const resq = new ResQClient({
+  baseURL: "http://localhost:8000/api/",
+  token: "your_jwt_token",
+});
+
+// Send chat message
+const response = await resq.chatbot.sendMessage(
+  "What should I do in an earthquake?"
+);
+console.log(response.response);
+
+// Report emergency
+const emergency = await resq.emergency.report({
+  description: "Building collapse",
+  location: { latitude: 38.4192, longitude: 27.1287 },
+  reporter_type: "VICTIM",
+});
+```
+
+### Mobile SDK (React Native)
+
+```javascript
+import { ResQMobileClient } from "resq-mobile-sdk";
+
+const client = new ResQMobileClient({
+  baseURL: "http://localhost:8000/api/",
+  firebaseConfig: {
+    /* Firebase config */
+  },
+});
+
+// Chat with AI
+const chatResponse = await client.chat("How to treat burns?");
+
+// Send location
+await client.location.update({
+  latitude: 38.4192,
+  longitude: 27.1287,
+});
+```
+
 ## Social Media Integration
 
-### Post to Social Media
+ResQ can automatically share emergency reports to social media platforms to increase visibility and response time.
+
+### Social Post
 
 **Endpoint**: `POST /social/post/`
 
-**Description**: Post emergency information to social media platforms
+**Description**: Post a message with a photo or video to social media platforms (Facebook, Telegram, Discord)
 
-**Authentication**: Required (Admin or emergency services only)
+**Authentication**: Required
 
-**Request Body (multipart/form-data)**:
+**Request Body** (multipart/form-data):
 
-- `content`: Text content for the post
-- `media_file`: Image or video file
-- `platforms`: Array of platforms (FACEBOOK, TELEGRAM, DISCORD)
+```json
+{
+  "content": "Emergency alert: Flooding in downtown area",
+  "file": [binary file - photo or video]
+}
+```
 
 **Response (200 OK)**:
 
@@ -942,90 +1396,156 @@ Authorization: Firebase {firebase_id_token}
 }
 ```
 
-## Analytics
+**Possible Errors**:
 
-### Global Analytics
+- 400 Bad Request: If no file is provided
+- 500 Internal Server Error: If there's an issue posting to any platform
 
-**Endpoint**: `GET /analytics/global/?days=30`
+### Social Media Emergency Integration
 
-**Description**: Get system-wide analytics data
+When reporting emergencies using the emergency reporting endpoint, emergency information is automatically shared to social media platforms.
 
-**Authentication**: Required (Admin or emergency services only)
+The existing emergency reporting endpoint (`POST /emergency/reports/report_emergency/`) now includes social media integration.
 
-**Query Parameters**:
+**Additions to Emergency Reporting**:
 
-- `days`: Number of days to include in the analysis (default: 30)
+- You can now include a `media_file` in the multipart/form-data request to attach media to the social posts
+- Emergency details, including description, type, and location will be formatted and shared on Facebook, Telegram, and Discord
+- The response includes results of social media posting attempts
 
-**Response (200 OK)**:
+**Example Request** (multipart/form-data):
 
 ```json
 {
-  "period": "Last 30 days",
-  "active_users": 1250,
-  "new_users": 380,
-  "emergency_reports": 425,
-  "resolved_emergencies": 398,
-  "resolution_rate": 93.65,
-  "emergency_types": {
-    "EARTHQUAKE": {
-      "count": 245,
-      "avg_response_time": 15.3,
-      "resolution_rate": 92.2
+  "reporter_type": "VICTIM",
+  "description": "Building collapsed, need urgent help",
+  "latitude": 38.4192,
+  "longitude": 27.1287,
+  "tags": [
+    "3fa85f64-5717-4562-b3fc-2c963f66afab",
+    "5fa85f64-5717-4562-b3fc-2c963f66afad"
+  ],
+  "media_file": [binary file - photo or video]
+}
+```
+
+**Response (201 Created)**:
+
+```json
+{
+  "id": "6fa85f64-5717-4562-b3fc-2c963f66afae",
+  "reporter": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "reporter_type": "VICTIM",
+  "description": "Building collapsed, need urgent help",
+  "latitude": 38.4192,
+  "longitude": 27.1287,
+  "status": "PENDING",
+  "is_emergency": true,
+  "tags": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afab",
+      "name": "Building Collapse",
+      "emergency_type": "EARTHQUAKE"
     },
-    "FIRE": {
-      "count": 120,
-      "avg_response_time": 12.5,
-      "resolution_rate": 96.7
+    {
+      "id": "5fa85f64-5717-4562-b3fc-2c963f66afad",
+      "name": "Trapped Individuals",
+      "emergency_type": "DISASTER"
     }
+  ],
+  "timestamp": "2025-04-15T10:30:33Z",
+  "social_post_results": {
+    "facebook": "Post ID or URL",
+    "telegram": "Message ID",
+    "discord": "Message Link"
   }
 }
 ```
 
-### Regional Analytics
+### Get Social Post Status
 
-**Endpoint**: `GET /analytics/regional/?days=30`
+**Endpoint**: `GET /social/posts/{id}/`
 
-**Description**: Get analytics data by region
-
-**Authentication**: Required (Emergency services only)
-
-**Query Parameters**:
-
-- `days`: Number of days to include in the analysis (default: 30)
-
-**Response (200 OK)**:
-
-```json
-{
-  "period": "Last 30 days",
-  "regions": {
-    "Izmir-Konak": {
-      "emergency_count": 85,
-      "response_time_avg": 13.2
-    },
-    "Izmir-Bornova": {
-      "emergency_count": 62,
-      "response_time_avg": 14.8
-    }
-  }
-}
-```
-
-### User Analytics
-
-**Endpoint**: `GET /analytics/user/?days=30`
-
-**Description**: Get analytics data for the current user
+**Description**: Get the status of a specific social media post
 
 **Authentication**: Required
 
-**Query Parameters**:
-
-- `days`: Number of days to include in the analysis (default: 30)
-
 **Response (200 OK)**:
 
 ```json
 {
-  "period": "Last 30 days",
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa9",
+  "platform": "FACEBOOK",
+  "content": "Emergency alert: Flooding in downtown area",
+  "photo": "http://localhost:8000/media/social/photos/flood.jpg",
+  "video": null,
+  "status": "POSTED",
+  "timestamp": "2025-04-15T14:25:33Z"
+}
+```
+
+### List Social Posts
+
+**Endpoint**: `GET /social/posts/`
+
+**Description**: Get a list of all social media posts made by the user
+
+**Authentication**: Required
+
+**Response (200 OK)**:
+
+```json
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa9",
+    "platform": "FACEBOOK",
+    "content": "Emergency alert: Flooding in downtown area",
+    "photo": "http://localhost:8000/media/social/photos/flood.jpg",
+    "video": null,
+    "status": "POSTED",
+    "timestamp": "2025-04-15T14:25:33Z"
+  },
+  {
+    "id": "4fa85f64-5717-4562-b3fc-2c963f66afab",
+    "platform": "TELEGRAM",
+    "content": "Emergency alert: Flooding in downtown area",
+    "photo": "http://localhost:8000/media/social/photos/flood.jpg",
+    "video": null,
+    "status": "POSTED",
+    "timestamp": "2025-04-15T14:25:34Z"
+  },
+  {
+    "id": "5fa85f64-5717-4562-b3fc-2c963f66afac",
+    "platform": "DISCORD",
+    "content": "Emergency alert: Flooding in downtown area",
+    "photo": "http://localhost:8000/media/social/photos/flood.jpg",
+    "video": null,
+    "status": "POSTED",
+    "timestamp": "2025-04-15T14:25:35Z"
+  }
+]
+```
+
+### Social Media Format
+
+**Social Media Post Format**:
+
+- **Facebook**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+- **Telegram**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+- **Discord**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+
+**Note**: Ensure compliance with each platform's content policies and guidelines.
+]
+
+```
+
+### Social Media Format
+
+**Social Media Post Format**:
+
+- **Facebook**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+- **Telegram**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+- **Discord**: Supports text, photos, and videos. Use the `/social/post/` endpoint to share.
+
+**Note**: Ensure compliance with each platform's content policies and guidelines.
 ```
