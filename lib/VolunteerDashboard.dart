@@ -4,8 +4,7 @@ import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
 import 'services/location_service.dart';
 import 'services/emergency_report_service.dart'; // Added missing import
-import 'MapPage.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'Map_Page_for_Volunteer.dart';
 
 class VolunteerDashboard extends StatefulWidget {
   const VolunteerDashboard({super.key});
@@ -148,7 +147,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     final user = Provider.of<AuthProvider>(context).user;
     final teamName = user?.fullName ?? "Volunteer Team";
     final authProvider = Provider.of<AuthProvider>(context);
-    final displayCity = authProvider.city ?? _cityName ?? 'Tap to get location';
+    final displayCity = authProvider.city ?? _cityName ?? 'Get location';
 
     return Scaffold(
       key: _scaffoldKey,
@@ -163,23 +162,27 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: Colors.red,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: const Icon(
                 Icons.volunteer_activism,
                 color: Colors.white,
-                size: 20,
+                size: 18,
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              'ResQ Volunteer',
-              style: TextStyle(
-                color: Colors.red[500],
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Text(
+                'ResQ Volunteer',
+                style: TextStyle(
+                  color: Colors.red[500],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -187,6 +190,19 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         backgroundColor: Colors.white,
         elevation: 1,
         actions: [
+          // Refresh button in app bar
+          IconButton(
+            onPressed: () {
+              _loadDashboardData();
+              _fetchEmergencyData();
+            },
+            icon: Icon(
+              Icons.refresh,
+              color: Colors.red[700],
+            ),
+            tooltip: 'Refresh Data',
+          ),
+          // Location display - made more compact
           GestureDetector(
             onTap: () {
               if (!_isLoadingLocation) {
@@ -194,18 +210,20 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               }
             },
             child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              constraints: const BoxConstraints(maxWidth: 120),
               decoration: BoxDecoration(
                 color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _isLoadingLocation
                       ? SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 12,
+                        height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.red[700],
@@ -214,53 +232,69 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                       : Icon(
                         Icons.location_on,
                         color: Colors.red[700],
-                        size: 16,
+                        size: 14,
                       ),
                   const SizedBox(width: 4),
-                  Text(
-                    displayCity,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.red[700],
-                      fontWeight: FontWeight.w500,
+                  Flexible(
+                    child: Text(
+                      displayCity,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          CircleAvatar(
-            backgroundColor: Colors.red.shade100,
-            radius: 16,
-            child: Icon(
-              Icons.volunteer_activism,
-              color: Colors.red[700],
-              size: 18,
+          // User avatar - made smaller
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: CircleAvatar(
+              backgroundColor: Colors.red.shade100,
+              radius: 14,
+              child: Icon(
+                Icons.volunteer_activism,
+                color: Colors.red[700],
+                size: 16,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
         ],
       ),
       drawer: _buildDrawer(teamName),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _loadDashboardData();
+          await _fetchEmergencyData();
+        },
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
                 children: [
                   _buildVolunteerStats(),
                   _buildActiveMissions(),
                   Expanded(
-                    child:
-                        _pendingEmergencies.isEmpty
-                            ? _buildEmptyTaskList()
-                            : _buildTaskList(),
+                    child: _pendingEmergencies.isEmpty
+                        ? _buildEmptyTaskList()
+                        : _buildTaskList(),
                   ),
                 ],
               ),
+      ),
       bottomNavigationBar: _buildBottomNavigationBar(),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          _showVolunteerOptions();
+          // Replace the modal bottom sheet with direct navigation to MapPageForVolunteer
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MapPageForVolunteer(),
+            ),
+          );
         },
         backgroundColor: Colors.red,
         child: const Icon(Icons.add),
@@ -401,20 +435,22 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
 
   Widget _buildActiveMissions() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey[50],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
             'Active Volunteer Missions',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _fetchEmergencyData,
-            icon: Icon(Icons.refresh),
-            label: Text('Refresh'),
+          Text(
+            '${_pendingEmergencies.length} tasks',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -659,72 +695,76 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   color: _getStatusColor(emergency['status'] ?? 'PENDING'),
                 ),
                 const SizedBox(width: 8),
-                Text('${emergency['incident_type'] ?? 'Emergency'} Details'),
+                Flexible(
+                  child: Text('${emergency['incident_type'] ?? 'Emergency'} Details'),
+                ),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow(
-                  'Incident Type',
-                  emergency['incident_type'] ?? 'General Incident',
-                ),
-                _detailRow(
-                  'Reporter Type',
-                  emergency['reporter_type'] ?? 'Anonymous',
-                ),
-                _detailRow(
-                  'Reporter Name',
-                  emergency['reporter_name'] ?? 'Unknown',
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openMapWithLocation(
-                      emergency['latitude'] as double?,
-                      emergency['longitude'] as double?,
-                    );
-                  },
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 90,
-                        child: Text(
-                          'Location:',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          [
-                            emergency['address'],
-                            '${emergency['latitude']?.toStringAsFixed(6)}, ${emergency['longitude']?.toStringAsFixed(6)}',
-                          ].where((e) => e != null).join(' - '),
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                      Icon(
-                        Icons.open_in_new,
-                        size: 16,
-                        color: Colors.blue[600],
-                      ),
-                    ],
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _detailRow(
+                    'Incident Type',
+                    emergency['incident_type'] ?? 'General Incident',
                   ),
-                ),
-                _detailRow('Status', emergency['status'] ?? 'PENDING'),
-                _detailRow('Priority', emergency['priority'] ?? 'MODERATE'),
-                _detailRow(
-                  'Time',
-                  emergency['created_at'] ?? emergency['timeAgo'] ?? '',
-                ),
-                _detailRow(
-                  'Contact',
-                  emergency['contact_info'] ?? 'No contact info',
-                ),
-                _detailRow('Description', emergency['description'] ?? ''),
-              ],
+                  _detailRow(
+                    'Reporter Type',
+                    emergency['reporter_type'] ?? 'Anonymous',
+                  ),
+                  _detailRow(
+                    'Reporter Name',
+                    emergency['reporter_name'] ?? 'Unknown',
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openMapWithLocation(
+                        emergency['latitude'] as double?,
+                        emergency['longitude'] as double?,
+                      );
+                    },
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 90,
+                          child: Text(
+                            'Location:',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            [
+                              emergency['address'],
+                              '${emergency['latitude']?.toStringAsFixed(6)}, ${emergency['longitude']?.toStringAsFixed(6)}',
+                            ].where((e) => e != null).join(' - '),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        Icon(
+                          Icons.open_in_new,
+                          size: 16,
+                          color: Colors.blue[600],
+                        ),
+                      ],
+                    ),
+                  ),
+                  _detailRow('Status', emergency['status'] ?? 'PENDING'),
+                  _detailRow('Priority', emergency['priority'] ?? 'MODERATE'),
+                  _detailRow(
+                    'Time',
+                    emergency['created_at'] ?? emergency['timeAgo'] ?? '',
+                  ),
+                  _detailRow(
+                    'Contact',
+                    emergency['contact_info'] ?? 'No contact info',
+                  ),
+                  _detailRow('Description', emergency['description'] ?? ''),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -811,77 +851,6 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     );
   }
 
-  void _showVolunteerOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.add_task, color: Colors.red),
-                ),
-                title: const Text('Create New Mission'),
-                subtitle: const Text('Organize volunteers for a task'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Handle create mission
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.people_alt, color: Colors.blue),
-                ),
-                title: const Text('Recruit Volunteers'),
-                subtitle: const Text('Add volunteers to your team'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Handle volunteer recruitment
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.medical_services,
-                    color: Colors.green,
-                  ),
-                ),
-                title: const Text('Request Resources'),
-                subtitle: const Text('Request medical or food supplies'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Handle resource request
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   // Handle logout
   Future<void> _handleLogout() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -909,7 +878,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => MapPage(initialLocation: LatLng(latitude, longitude)),
+        builder: (context) => MapPageForVolunteer(),
       ),
     );
   }

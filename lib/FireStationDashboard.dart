@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart'; // Add this import for LatLng
+// Add this import for LatLng
 import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
 import 'services/location_service.dart';
 import 'services/emergency_report_service.dart';
-import 'MapPage.dart';
+import 'Map_Page_For_Fire_Station.dart';
 
 class FireStationDashboard extends StatefulWidget {
   const FireStationDashboard({super.key});
@@ -142,52 +142,67 @@ class _FireStationDashboardState extends State<FireStationDashboard> {
   }
 
   // Show status update dialog with API integration
-  void _showStatusUpdateDialog(Map<String, dynamic> emergency) {
-    String selectedStatus = emergency['status'] ?? 'PENDING';
+  // Replace the _showStatusUpdateDialog method with this fixed version
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Update Emergency Status'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Current Status: ${emergency['status'] ?? 'PENDING'}'),
-                const SizedBox(height: 16),
-                Text('Select new status:'),
-                const SizedBox(height: 8),
-                ...statusOptions.map(
-                  (status) => RadioListTile<String>(
-                    title: Text(status['label']!),
-                    value: status['value']!,
-                    groupValue: selectedStatus,
-                    onChanged: (value) {
-                      if (value != null) {
-                        selectedStatus = value;
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _updateEmergencyStatus(emergency['id'], selectedStatus);
+void _showStatusUpdateDialog(Map<String, dynamic> emergency) {
+  String selectedStatus = emergency['status'] ?? 'PENDING';
+
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text('Update Emergency Status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Current Status: ${emergency['status'] ?? 'PENDING'}'),
+            const SizedBox(height: 16),
+            Text('Select new status:'),
+            const SizedBox(height: 8),
+            ...statusOptions.map(
+              (status) => RadioListTile<String>(
+                title: Text(status['label']!),
+                value: status['value']!,
+                groupValue: selectedStatus,
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      selectedStatus = value;
+                    });
+                  }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: Text('Update'),
               ),
-            ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
           ),
-    );
-  }
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _updateEmergencyStatus(emergency['id'], selectedStatus);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[600],
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              'Update',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildEmergencyCard(Map<String, dynamic> emergency) {
     final status = emergency['status'] ?? 'PENDING';
@@ -506,7 +521,7 @@ class _FireStationDashboardState extends State<FireStationDashboard> {
                   Navigator.of(context).pop();
                   _showStatusUpdateDialog(emergency);
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 254, 254, 254)),
                 child: const Text('Update Status'),
               ),
             ],
@@ -1004,7 +1019,7 @@ class _FireStationDashboardState extends State<FireStationDashboard> {
       context,
       MaterialPageRoute(
         builder:
-            (context) => MapPage(initialLocation: LatLng(latitude, longitude)),
+            (context) => MapPageForFireStation(),
       ),
     );
   }

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'services/emergency_report_service.dart';
 import 'providers/auth_provider.dart';
 import 'Landing_Page.dart';
-import 'MapPage.dart';
+import 'Map_Page_For_Police_Station.dart';
 
 void main() {
   runApp(const MyApp());
@@ -202,53 +201,67 @@ class _PoliceDashboardState extends State<PoliceDashboard>
   }
 
   // Show the status change dialog for API emergency objects
-  void _showStatusUpdateDialog(Map<String, dynamic> emergency) {
-    String selectedStatus = emergency['status'] ?? 'PENDING';
+  // Replace the _showStatusUpdateDialog method with this fixed version
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Update Emergency Status'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Current Status: ${emergency['status'] ?? 'PENDING'}'),
-              const SizedBox(height: 16),
-              Text('Select new status:'),
-              const SizedBox(height: 8),
-              ...statusOptions.map(
-                (status) => RadioListTile<String>(
-                  title: Text(status['label']!),
-                  value: status['value']!,
-                  groupValue: selectedStatus,
-                  onChanged: (value) {
-                    if (value != null) {
+void _showStatusUpdateDialog(Map<String, dynamic> emergency) {
+  String selectedStatus = emergency['status'] ?? 'PENDING';
+
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text('Update Emergency Status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Current Status: ${emergency['status'] ?? 'PENDING'}'),
+            const SizedBox(height: 16),
+            Text('Select new status:'),
+            const SizedBox(height: 8),
+            ...statusOptions.map(
+              (status) => RadioListTile<String>(
+                title: Text(status['label']!),
+                value: status['value']!,
+                groupValue: selectedStatus,
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
                       selectedStatus = value;
-                    }
-                  },
-                ),
+                    });
+                  }
+                },
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _updateEmergencyStatus(emergency['id'], selectedStatus);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: Text('Update'),
             ),
           ],
-        );
-      },
-    );
-  }
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _updateEmergencyStatus(emergency['id'], selectedStatus);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[600],
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              'Update',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   // Get the status label from the status code
   String _getStatusLabel(Emergency emergency) {
@@ -511,7 +524,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
   Widget _buildMapTab() {
     return Column(
       children: [
-        _buildMap(),
+       
         _buildFilterTabs(),
         Expanded(child: _buildEmergencyList()),
       ],
@@ -622,15 +635,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
     );
   }
 
-  Widget _buildMap() {
-    return Container(
-      height: 200,
-      color: const Color(0xFFF5F5F5),
-      child: const Center(
-        child: Text('Map View Goes Here', style: TextStyle(color: Colors.grey)),
-      ),
-    );
-  }
+  
 
   Widget _buildFilterTabs() {
     return Container(
@@ -923,7 +928,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
                     _showStatusUpdateDialog(emergency);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isResponding ? Colors.grey : Colors.red,
+                    backgroundColor: isResponding ? const Color.fromARGB(255, 255, 255, 255) : const Color.fromARGB(255, 237, 27, 27),
                   ),
                   child: Text(isResponding ? 'Update' : 'Respond'),
                 ),
@@ -1010,7 +1015,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
                   Navigator.of(context).pop();
                   _showStatusUpdateDialog(emergency);
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 245, 242, 241)),
                 child: Text('Update Status'),
               ),
             ],
@@ -1080,7 +1085,7 @@ class _PoliceDashboardState extends State<PoliceDashboard>
       context,
       MaterialPageRoute(
         builder:
-            (context) => MapPage(initialLocation: LatLng(latitude, longitude)),
+            (context) => MapPageForPoliceStation(),
       ),
     );
   }
