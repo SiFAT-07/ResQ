@@ -396,9 +396,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Technical Support
 
-- Email: support@resq-app.com
+- Email: IftekharulIslamRefat00@gmail.com 
 - GitHub Issues: [Create an issue](https://github.com/your-username/resq-emergency-app/issues)
-- Documentation: [Wiki](https://github.com/your-username/resq-emergency-app/wiki)
 
 ## 🔐 Security
 
